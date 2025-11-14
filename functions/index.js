@@ -33,11 +33,7 @@ exports.sendEmergencySMS = functions.https.onCall(async (data, context) => {
       );
     }
 
-    // 🔥 REPLACE WITH YOUR REAL TWILIO CREDENTIALS
-    const TWILIO_ACCOUNT_SID = 'AC5143c4f189a13c8fa71dec8c7d9a9738';
-    const TWILIO_AUTH_TOKEN = 'e6e84bd412fb16d11b94398172775cbb';
-    const TWILIO_PHONE = '+15079363358';
-
+    
     // Format the message
     let msg = data.message;
     
