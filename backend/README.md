@@ -79,11 +79,7 @@ JWT_SECRET=your_very_secret_key_change_this
 FIREBASE_PROJECT_ID=alpha-flutter-health
 FIREBASE_PRIVATE_KEY_PATH=./firebase-service-account.json
 
-# Twilio (already configured)
-TWILIO_ACCOUNT_SID=AC5143c4f189a13c8fa71dec8c7d9a9738
-TWILIO_AUTH_TOKEN=e6e84bd412fb16d11b94398172775cbb
-TWILIO_PHONE_NUMBER=+15079363358
-```
+
 
 ## 🚀 Running the Server
 
