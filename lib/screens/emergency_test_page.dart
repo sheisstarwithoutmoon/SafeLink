@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
+import 'dart:async';
 import '../services/api_service.dart';
 import '../services/socket_service.dart';
 import '../services/fcm_service.dart';
@@ -36,6 +37,8 @@ class _EmergencyTestPageState extends State<EmergencyTestPage> {
   
   String statusMessage = "Not connected";
   Color statusColor = Colors.orange;
+  
+  StreamSubscription? _bluetoothSubscription; // Track subscription
 
   @override
   void initState() {
@@ -43,6 +46,7 @@ class _EmergencyTestPageState extends State<EmergencyTestPage> {
     _checkRegistration();
     _setupSocketListeners();
     _setupFcmListeners();
+    _setupBluetoothListener();
   }
 
   @override
@@ -51,6 +55,7 @@ class _EmergencyTestPageState extends State<EmergencyTestPage> {
     _nameController.dispose();
     _contactPhoneController.dispose();
     _contactNameController.dispose();
+    _bluetoothSubscription?.cancel(); // Cancel Bluetooth subscription
     super.dispose();
   }
 
@@ -94,7 +99,7 @@ class _EmergencyTestPageState extends State<EmergencyTestPage> {
     };
 
     _socketService.onAlertSent = (alertId, message) {
-      _showMessage("✅ $message", isError: false);
+      _showMessage("$message", isError: false);
     };
 
     _socketService.onAlertCancelled = (alertId) {
@@ -108,12 +113,44 @@ class _EmergencyTestPageState extends State<EmergencyTestPage> {
   void _setupFcmListeners() {
     _fcmService.onMessageReceived = (message) {
       print("FCM Message: ${message.notification?.title}");
-      _showMessage("📱 ${message.notification?.title}", isError: false);
+      _showMessage("${message.notification?.title}", isError: false);
     };
 
     _fcmService.onMessageOpenedApp = (message) {
       print("Opened from notification: ${message.data}");
     };
+  }
+
+  void _setupBluetoothListener() {
+    // Cancel existing subscription if any
+    _bluetoothSubscription?.cancel();
+    
+    // Listen to Bluetooth data for accident detection
+    _bluetoothSubscription = _bluetoothService.dataStream.listen((data) {
+      print('Bluetooth Data Received: $data');
+      
+      // Check for accident alert from Arduino
+      if (data.contains('ACCIDENT ALERT') || data.contains('ACCIDENT')) {
+        print('Accident detected from Bluetooth!');
+        
+        // Extract magnitude if available
+        int magnitude = 0;
+        if (data.contains('INTENSITY:') || data.contains('Magnitude:')) {
+          RegExp exp = RegExp(r'\d+');
+          var match = exp.firstMatch(data);
+          if (match != null) {
+            magnitude = int.tryParse(match.group(0)!) ?? 0;
+          }
+        }
+        
+        // Trigger emergency alert automatically
+        if (isRegistered && emergencyContacts.isNotEmpty) {
+          _createAccidentAlert(magnitude: magnitude);
+        } else {
+          _showMessage("Accident detected but no emergency contacts set up!", isError: true);
+        }
+      }
+    });
   }
 
   Future<void> _loadProfile() async {
@@ -163,9 +200,9 @@ class _EmergencyTestPageState extends State<EmergencyTestPage> {
       // Reconnect socket with new user ID
       await _socketService.connect();
 
-      _showMessage("✅ Registration successful!", isError: false);
+      _showMessage("Registration successful!", isError: false);
     } catch (e) {
-      _showMessage("❌ Registration failed: $e");
+      _showMessage("Registration failed: $e");
     } finally {
       setState(() => isLoading = false);
     }
@@ -203,9 +240,9 @@ class _EmergencyTestPageState extends State<EmergencyTestPage> {
         _contactNameController.clear();
       });
 
-      _showMessage("✅ Contact added!", isError: false);
+      _showMessage("Contact added!", isError: false);
     } catch (e) {
-      _showMessage("❌ Failed: $e");
+      _showMessage("Failed: $e");
     } finally {
       setState(() => isLoading = false);
     }
@@ -253,12 +290,58 @@ class _EmergencyTestPageState extends State<EmergencyTestPage> {
         address: 'Test Location',
       );
 
-      _showMessage("🚨 Test alert created! Countdown: 15s", isError: false);
+      _showMessage("Test alert created! Countdown: 15s", isError: false);
       
       // Start countdown dialog
       _showCountdownDialog();
     } catch (e) {
-      _showMessage("❌ Failed to create alert: $e");
+      _showMessage("Failed to create alert: $e");
+    } finally {
+      setState(() => isLoading = false);
+    }
+  }
+
+  // Real accident alert triggered by Bluetooth
+  Future<void> _createAccidentAlert({int magnitude = 0}) async {
+    if (!isRegistered || emergencyContacts.isEmpty) return;
+
+    setState(() => isLoading = true);
+
+    try {
+      // Get current location
+      Position position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+
+      // Create alert via API with real Arduino data
+      var alert = await _apiService.createAlert(
+        latitude: position.latitude,
+        longitude: position.longitude,
+        magnitude: magnitude,
+        address: 'Auto-detected Location',
+        deviceInfo: 'Arduino HC-05 Accelerometer',
+        bluetoothDevice: _bluetoothService.connectedDevice?.name ?? 'HC-05',
+      );
+
+      setState(() {
+        currentAlertId = alert['id'];
+      });
+
+      // Emit via Socket.IO
+      _socketService.createEmergency(
+        alertId: alert['id'],
+        latitude: position.latitude,
+        longitude: position.longitude,
+        magnitude: magnitude,
+        address: 'Auto-detected Location',
+      );
+
+      _showMessage("ACCIDENT DETECTED! Alert countdown started", isError: false);
+      
+      // Start countdown dialog
+      _showCountdownDialog();
+    } catch (e) {
+      _showMessage("Failed to create accident alert: $e");
     } finally {
       setState(() => isLoading = false);
     }
@@ -266,6 +349,8 @@ class _EmergencyTestPageState extends State<EmergencyTestPage> {
 
   Future<void> _cancelAlert() async {
     if (currentAlertId == null) return;
+
+    setState(() => isLoading = true);
 
     try {
       await _apiService.cancelAlert(currentAlertId!);
@@ -275,66 +360,25 @@ class _EmergencyTestPageState extends State<EmergencyTestPage> {
         currentAlertId = null;
       });
 
-      Navigator.of(context).pop(); // Close countdown dialog
-      _showMessage("✅ Alert cancelled!", isError: false);
+      _showMessage("Alert cancelled! You're safe.", isError: false);
     } catch (e) {
-      _showMessage("❌ Failed to cancel: $e");
+      _showMessage("Failed to cancel: $e");
+    } finally {
+      setState(() => isLoading = false);
     }
   }
 
   void _showCountdownDialog() {
-    int countdown = 15;
-    
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) {
-          // Start countdown
-          if (countdown > 0) {
-            Future.delayed(const Duration(seconds: 1), () {
-              if (countdown > 0) {
-                setDialogState(() => countdown--);
-              } else {
-                Navigator.of(context).pop();
-                _showMessage("🚨 Alert sent to emergency contacts!", isError: false);
-              }
-            });
-          }
-
-          return AlertDialog(
-            title: const Text("🚨 Emergency Alert"),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  "$countdown",
-                  style: const TextStyle(
-                    fontSize: 72,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.red,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                const Text(
-                  "Alert will be sent in:",
-                  style: TextStyle(fontSize: 16),
-                ),
-                const SizedBox(height: 8),
-                const LinearProgressIndicator(),
-              ],
-            ),
-            actions: [
-              TextButton.icon(
-                onPressed: _cancelAlert,
-                icon: const Icon(Icons.cancel),
-                label: const Text("Cancel Alert"),
-                style: TextButton.styleFrom(
-                  foregroundColor: Colors.red,
-                ),
-              ),
-            ],
-          );
+      builder: (context) => _CountdownDialog(
+        onCancel: _cancelAlert,
+        onComplete: () {
+          setState(() {
+            currentAlertId = null;
+          });
+          _showMessage("Alert sent to emergency contacts!", isError: false);
         },
       ),
     );
@@ -651,7 +695,7 @@ class _EmergencyTestPageState extends State<EmergencyTestPage> {
                     label: const Padding(
                       padding: EdgeInsets.symmetric(vertical: 16),
                       child: Text(
-                        "🚨 CREATE TEST ALERT",
+                        "CREATE TEST ALERT",
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
@@ -704,6 +748,114 @@ class _EmergencyTestPageState extends State<EmergencyTestPage> {
           ],
         ),
       ),
+    );
+  }
+}
+
+// Countdown Dialog Widget
+class _CountdownDialog extends StatefulWidget {
+  final VoidCallback onCancel;
+  final VoidCallback onComplete;
+
+  const _CountdownDialog({
+    Key? key,
+    required this.onCancel,
+    required this.onComplete,
+  }) : super(key: key);
+
+  @override
+  State<_CountdownDialog> createState() => _CountdownDialogState();
+}
+
+class _CountdownDialogState extends State<_CountdownDialog> {
+  int countdown = 15;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _startCountdown();
+  }
+
+  void _startCountdown() {
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (countdown > 0) {
+        setState(() {
+          countdown--;
+        });
+      } else {
+        _timer?.cancel();
+        Navigator.of(context).pop(); // Close dialog
+        widget.onComplete(); // Notify parent
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Row(
+        children: [
+          Icon(Icons.warning, color: Colors.red, size: 32),
+          SizedBox(width: 8),
+          Text("Emergency Alert"),
+        ],
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            "$countdown",
+            style: const TextStyle(
+              fontSize: 72,
+              fontWeight: FontWeight.bold,
+              color: Colors.red,
+            ),
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            "Alert will be sent to emergency contacts in:",
+            style: TextStyle(fontSize: 16),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 16),
+          LinearProgressIndicator(
+            value: (15 - countdown) / 15,
+            backgroundColor: Colors.grey.shade300,
+            valueColor: const AlwaysStoppedAnimation<Color>(Colors.red),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            "${countdown} seconds remaining",
+            style: const TextStyle(
+              fontSize: 12,
+              color: Colors.grey,
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        ElevatedButton.icon(
+          onPressed: () {
+            _timer?.cancel();
+            Navigator.of(context).pop(); // Close dialog
+            widget.onCancel(); // Call cancel function
+          },
+          icon: const Icon(Icons.cancel),
+          label: const Text("I'm OK - Cancel Alert"),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.green,
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+          ),
+        ),
+      ],
     );
   }
 }

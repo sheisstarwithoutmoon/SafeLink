@@ -107,54 +107,89 @@ class BluetoothService {
   }
 
   /// Connect to a Bluetooth device
-  Future<bool> connectToDevice(BluetoothDevice device) async {
+  Future<bool> connectToDevice(BluetoothDevice device, {int maxRetries = 2}) async {
     if (_isConnecting) {
-      print('⚠️ Already connecting to a device');
+      print('Already connecting to a device, please wait...');
       return false;
     }
 
-    try {
-      _isConnecting = true;
-      print('🔗 Connecting to ${device.name ?? device.address}...');
-
-      // Disconnect from current device if connected
-      if (_isConnected) {
-        await disconnect();
-      }
-
-      _connection = await BluetoothConnection.toAddress(device.address);
-      _isConnected = true;
-      _isConnecting = false;
-      _connectedDevice = device;
-      _connectionStateController.add(true);
-
-      print('✅ Connected to ${device.name ?? device.address}');
-
-      // Listen to incoming data
-      _connection!.input!.listen(
-        (data) {
-          String message = String.fromCharCodes(data);
-          print('📩 Received: $message');
-          _dataController.add(message);
-        },
-        onDone: () {
-          print('🔌 Connection closed');
-          _handleDisconnection();
-        },
-        onError: (error) {
-          print('❌ Connection error: $error');
-          _handleDisconnection();
-        },
-      );
-
+    // If already connected to this device, return success
+    if (_isConnected && _connectedDevice?.address == device.address) {
+      print('Already connected to ${device.name ?? device.address}');
       return true;
-    } catch (e) {
-      print('❌ Error connecting to device: $e');
-      _isConnecting = false;
-      _isConnected = false;
-      _connectionStateController.add(false);
-      return false;
     }
+
+    for (int attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        _isConnecting = true;
+        print('Connecting to ${device.name ?? device.address}... (Attempt $attempt/$maxRetries)');
+
+        // Disconnect from current device if connected to a different device
+        if (_isConnected && _connectedDevice?.address != device.address) {
+          await disconnect();
+          await Future.delayed(const Duration(milliseconds: 500));
+        }
+
+        _connection = await BluetoothConnection.toAddress(device.address)
+            .timeout(
+              const Duration(seconds: 15),
+              onTimeout: () {
+                throw Exception('Connection timeout - HC-05 not responding');
+              },
+            );
+        
+        _isConnected = true;
+        _isConnecting = false;
+        _connectedDevice = device;
+        _connectionStateController.add(true);
+
+        print('Connected to ${device.name ?? device.address}');
+
+        // Listen to incoming data
+        _connection!.input!.listen(
+          (data) {
+            String message = String.fromCharCodes(data);
+            print('Received: $message');
+            _dataController.add(message);
+          },
+          onDone: () {
+            print('Connection closed by remote device');
+            _handleDisconnection();
+          },
+          onError: (error) {
+            print('Connection error: $error');
+            _handleDisconnection();
+          },
+          cancelOnError: false,
+        );
+
+        return true;
+      } catch (e) {
+        String errorMsg = e.toString();
+        if (errorMsg.contains('read failed')) {
+          print('Attempt $attempt failed: HC-05 socket error (device may be paired with another phone)');
+        } else if (errorMsg.contains('timeout')) {
+          print('Attempt $attempt failed: Connection timeout');
+        } else {
+          print('Attempt $attempt failed: $errorMsg');
+        }
+        
+        _isConnecting = false;
+        _isConnected = false;
+        _connectionStateController.add(false);
+        
+        if (attempt < maxRetries) {
+          print('Retrying in 2 seconds...');
+          await Future.delayed(const Duration(seconds: 2));
+        }
+      }
+    }
+    
+    print('Failed to connect after $maxRetries attempts. Try:');
+    print('1. Unpair HC-05 from other devices');
+    print('2. Move closer to HC-05');
+    print('3. Reset Arduino and HC-05 module');
+    return false;
   }
 
   /// Send data to connected device

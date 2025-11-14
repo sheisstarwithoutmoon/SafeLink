@@ -30,7 +30,7 @@ class _BluetoothDevicesPageState extends State<BluetoothDevicesPage> {
         if (isConnected) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('✅ Connected to ${_bluetoothService.connectedDevice?.name}'),
+              content: Text('Connected to ${_bluetoothService.connectedDevice?.name}'),
               backgroundColor: Colors.green,
             ),
           );
@@ -40,7 +40,7 @@ class _BluetoothDevicesPageState extends State<BluetoothDevicesPage> {
 
     // Listen to incoming data
     _bluetoothService.dataStream.listen((data) {
-      print('📩 Bluetooth Data: $data');
+      print('Bluetooth Data: $data');
       // Handle incoming data (e.g., accident detection signal)
       if (data.contains('ACCIDENT') || data.contains('CRASH')) {
         _handleAccidentDetected();
@@ -107,14 +107,14 @@ class _BluetoothDevicesPageState extends State<BluetoothDevicesPage> {
     if (success) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('✅ Connected to ${device.name ?? device.address}'),
+          content: Text('Connected to ${device.name ?? device.address}'),
           backgroundColor: Colors.green,
         ),
       );
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('❌ Failed to connect to ${device.name ?? device.address}'),
+          content: Text('Failed to connect to ${device.name ?? device.address}'),
           backgroundColor: Colors.red,
         ),
       );

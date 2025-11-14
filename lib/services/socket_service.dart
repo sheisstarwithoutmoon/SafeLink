@@ -29,7 +29,7 @@ class SocketService {
     try {
       final userId = await _storage.getUserId();
       if (userId == null) {
-        print('⚠️ Socket.IO: User not logged in, skipping connection');
+        print('Socket.IO: User not logged in, skipping connection');
         return; // Don't throw error, just skip connection
       }
 

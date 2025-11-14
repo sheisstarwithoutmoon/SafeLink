@@ -58,7 +58,7 @@ class _SMSTestPageState extends State<SMSTestPage> {
     setState(() {
       emergencyContact = contact;
     });
-    _showMessage("✅ Contact saved successfully!", isError: false);
+    _showMessage("Contact saved successfully!", isError: false);
   }
 
   Future<void> _sendTestSMS() async {
@@ -72,10 +72,10 @@ class _SMSTestPageState extends State<SMSTestPage> {
     });
 
     try {
-      String smsBody = "🚨 TEST SMS!\n"
+      String smsBody = "EMERGENCY ALERT - TEST SMS!\n"
           "This is a test message from Safe Ride app.\n"
           "Time: ${DateTimeUtils.formatDateTime(DateTime.now())}\n\n"
-          "If you receive this, SMS is working! ✓";
+          "If you receive this, SMS is working!";
 
       bool success = await _smsService.sendEmergencySMS(
         phoneNumber: emergencyContact,
@@ -83,10 +83,10 @@ class _SMSTestPageState extends State<SMSTestPage> {
       );
 
       if (success) {
-        _showMessage("✅ SMS sent successfully!", isError: false);
+        _showMessage("SMS sent successfully!", isError: false);
       }
     } catch (e) {
-      _showMessage("❌ Failed to send SMS: $e");
+      _showMessage("Failed to send SMS: $e");
     } finally {
       setState(() {
         isLoading = false;
