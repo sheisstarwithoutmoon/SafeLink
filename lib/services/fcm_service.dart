@@ -8,6 +8,30 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   print('Handling background message: ${message.messageId}');
   print('Title: ${message.notification?.title}');
   print('Body: ${message.notification?.body}');
+  
+  // Save received notification to history (background)
+  try {
+    final storage = StorageService();
+    final receivedAlertData = {
+      'title': message.notification?.title ?? 'Emergency Alert',
+      'body': message.notification?.body ?? 'Emergency alert from contact',
+      'userName': message.data['userName'] ?? 'Unknown',
+      'userPhone': message.data['userPhoneNumber'] ?? 'Unknown',
+      'latitude': message.data['latitude']?.toString() ?? '0',
+      'longitude': message.data['longitude']?.toString() ?? '0',
+      'severity': message.data['severity'] ?? 'high',
+      'timestamp': DateTime.now().millisecondsSinceEpoch,
+      'time': DateTime.now().toIso8601String(),
+      'type': 'received', // Mark as received from others
+      'status': 'delivered',
+      'alertId': message.data['alertId'] ?? message.messageId,
+    };
+    
+    await storage.saveNotificationToHistory(receivedAlertData);
+    print('Saved background notification to history');
+  } catch (e) {
+    print('Error saving background notification: $e');
+  }
 }
 
 class FcmService {
@@ -121,10 +145,37 @@ class FcmService {
     print('Body: ${message.notification?.body}');
     print('Data: ${message.data}');
 
+    // Save received notification to history
+    await _saveReceivedNotification(message);
+
     onMessageReceived?.call(message);
 
     // Show local notification
     await _showLocalNotification(message);
+  }
+
+  Future<void> _saveReceivedNotification(RemoteMessage message) async {
+    try {
+      final receivedAlertData = {
+        'title': message.notification?.title ?? 'Emergency Alert',
+        'body': message.notification?.body ?? 'Emergency alert from contact',
+        'userName': message.data['userName'] ?? 'Unknown',
+        'userPhone': message.data['userPhoneNumber'] ?? 'Unknown',
+        'latitude': message.data['latitude']?.toString() ?? '0',
+        'longitude': message.data['longitude']?.toString() ?? '0',
+        'severity': message.data['severity'] ?? 'high',
+        'timestamp': DateTime.now().millisecondsSinceEpoch,
+        'time': DateTime.now().toIso8601String(),
+        'type': 'received', // Mark as received from others
+        'status': 'delivered',
+        'alertId': message.data['alertId'] ?? message.messageId,
+      };
+      
+      await _storage.saveNotificationToHistory(receivedAlertData);
+      print('Saved received notification to history');
+    } catch (e) {
+      print('Error saving received notification: $e');
+    }
   }
 
   Future<void> _showLocalNotification(RemoteMessage message) async {

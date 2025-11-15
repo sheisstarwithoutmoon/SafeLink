@@ -1,13 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import '../theme/app_theme.dart';
 import '../widgets/custom_button.dart';
 import '../widgets/custom_text_field.dart';
-import '../services/api_service.dart';
-import '../services/storage_service.dart';
-import '../services/fcm_service.dart';
-import '../models/user.dart';
-import 'home_screen.dart';
+import '../services/firebase_auth_service.dart';
+import 'otp_verification_screen.dart';
 
 class RegistrationScreen extends StatefulWidget {
   const RegistrationScreen({Key? key}) : super(key: key);
@@ -20,13 +16,11 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
-  final ApiService _apiService = ApiService();
-  final StorageService _storageService = StorageService();
-  final FcmService _fcmService = FcmService();
+  final FirebaseAuthService _firebaseAuth = FirebaseAuthService();
   
   bool _isLoading = false;
   bool _agreedToTerms = false;
-  String _selectedCountryCode = '+1';
+  String _selectedCountryCode = '+91'; // Default to India
 
   final List<String> _countryCodes = [
     '+1',   // USA/Canada
@@ -40,6 +34,23 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     '+34',  // Spain
     '+61',  // Australia
   ];
+
+  String _getPhoneHint() {
+    switch (_selectedCountryCode) {
+      case '+1':
+        return '5551234567';
+      case '+44':
+        return '7400123456';
+      case '+91':
+        return '6261795658';
+      case '+86':
+        return '13800138000';
+      case '+81':
+        return '9012345678';
+      default:
+        return '1234567890';
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -56,41 +67,14 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                 
                 // Header
                 Text(
-                  'Create Account',
+                  'Welcome',
                   style: Theme.of(context).textTheme.displayLarge,
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Set up your emergency profile',
+                  'Enter your phone number to continue',
                   style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                     color: AppTheme.textSecondary,
-                  ),
-                ),
-
-                const SizedBox(height: 16),
-
-                // Info about first connection
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.blue.shade50,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.blue.shade200),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(Icons.info_outline, color: Colors.blue.shade700, size: 20),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'First connection may take up to 60 seconds',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.blue.shade900,
-                          ),
-                        ),
-                      ),
-                    ],
                   ),
                 ),
 
@@ -100,13 +84,8 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                 CustomTextField(
                   controller: _nameController,
                   label: 'Full Name',
-                  hint: 'John Doe',
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Please enter your name';
-                    }
-                    return null;
-                  },
+                  prefixIcon: Icons.person_outline,
+                  hint: 'Enter your name',
                 ),
 
                 const SizedBox(height: 24),
@@ -151,7 +130,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                         controller: _phoneController,
                         keyboardType: TextInputType.phone,
                         decoration: InputDecoration(
-                          hintText: '(555) 123-4567',
+                          hintText: _getPhoneHint(),
                           hintStyle: TextStyle(color: AppTheme.textSecondary),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
@@ -177,6 +156,10 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                         validator: (value) {
                           if (value == null || value.isEmpty) {
                             return 'Please enter your phone number';
+                          }
+                          final digits = value.replaceAll(RegExp(r'[^0-9]'), '');
+                          if (digits.length < 10) {
+                            return 'Invalid phone number';
                           }
                           return null;
                         },
@@ -214,38 +197,26 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
 
                 const SizedBox(height: 32),
 
-                // Register button
+                // Send OTP button
                 CustomButton(
-                  text: 'Create Account',
-                  onPressed: _agreedToTerms && !_isLoading ? _handleRegister : null,
+                  text: 'Continue',
+                  onPressed: _agreedToTerms && !_isLoading ? _handleSendOTP : null,
                   type: CustomButtonType.primary,
                   isLoading: _isLoading,
                 ),
 
-                const SizedBox(height: 12),
+                const SizedBox(height: 24),
 
-                // Test connection button (for debugging)
-                TextButton.icon(
-                  onPressed: _testConnection,
-                  icon: const Icon(Icons.network_check),
-                  label: const Text('Test Server Connection'),
-                  style: TextButton.styleFrom(
-                    foregroundColor: AppTheme.textSecondary,
-                  ),
-                ),
-
-                const SizedBox(height: 16),
-
-                // Already have account
+                // Help center
                 Center(
                   child: TextButton(
                     onPressed: () {
-                      // Navigate to login if it exists
+                      _showOTPTroubleshootDialog();
                     },
                     child: Text(
-                      'Already have an account? Sign in',
+                      'Need help?',
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: AppTheme.primaryAccent,
+                        color: AppTheme.textSecondary,
                       ),
                     ),
                   ),
@@ -258,18 +229,8 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     );
   }
 
-  Future<void> _handleRegister() async {
+  Future<void> _handleSendOTP() async {
     if (!_formKey.currentState!.validate()) {
-      return;
-    }
-
-    if (!_agreedToTerms) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please agree to the terms and conditions'),
-          backgroundColor: Colors.red,
-        ),
-      );
       return;
     }
 
@@ -277,90 +238,79 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
       _isLoading = true;
     });
 
-    // Show initial message about potential cold start
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Connecting to server... First attempt may take 30-60 seconds'),
-        duration: Duration(seconds: 3),
-        backgroundColor: Colors.blue,
-      ),
-    );
-
     try {
-      final fullPhone = '$_selectedCountryCode${_phoneController.text}';
-      print('📱 Registering user with phone: $fullPhone');
+      // Clean phone number (remove spaces, dashes, parentheses, etc.)
+      final cleanPhone = _phoneController.text.replaceAll(RegExp(r'[^0-9]'), '');
       
-      final fcmToken = await _fcmService.getToken();
-      print('🔔 FCM Token: ${fcmToken?.substring(0, 20)}...');
+      // Build full phone number with selected country code
+      final fullPhone = '$_selectedCountryCode$cleanPhone';
 
-      print('🌐 Calling API registerUser...');
-      final response = await _apiService.registerUser(
-        name: _nameController.text,
-        phone: fullPhone,
-        fcmToken: fcmToken ?? '',
-      );
-
-      print('📦 API Response: $response');
-
-      if (response['success'] == true) {
-        print('✅ Registration successful!');
-        final user = User.fromJson(response['user']);
-        await _storageService.saveUserId(user.id);
-        
-        // Save phone number for future FCM token updates
-        await _storageService.savePhoneNumber(fullPhone);
-        
+      // Validate phone number
+      if (cleanPhone.length < 10) {
         if (!mounted) return;
-
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('✅ Account created successfully!'),
+            content: Text('Please enter a valid phone number (at least 10 digits)'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        setState(() {
+          _isLoading = false;
+        });
+        return;
+      }
+
+      // Send OTP via Firebase with the properly formatted number
+      final result = await _firebaseAuth.sendOTP(fullPhone);
+
+      if (!mounted) return;
+
+      if (result['success'] == true) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Verification code sent'),
             backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
           ),
         );
 
-        // Small delay to show success message
-        await Future.delayed(const Duration(milliseconds: 500));
-
-        if (!mounted) return;
-
-        Navigator.pushReplacement(
+        // Navigate to OTP verification screen with full phone number
+        Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => HomeScreen(user: user),
+            builder: (context) => OTPVerificationScreen(
+              phoneNumber: fullPhone,
+              name: _nameController.text,
+            ),
           ),
         );
       } else {
-        if (!mounted) return;
-        
-        print('❌ Registration failed: ${response['message']}');
-        
-        // Check if it's a timeout and offer to retry
-        final message = response['message'] ?? 'Registration failed';
-        final isTimeout = message.contains('timeout') || message.contains('Timeout');
-        
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(message),
+            content: Text(result['message'] ?? 'Unable to send verification code'),
             backgroundColor: Colors.red,
-            duration: const Duration(seconds: 5),
-            action: isTimeout ? SnackBarAction(
-              label: 'RETRY',
+            duration: const Duration(seconds: 4),
+            action: SnackBarAction(
+              label: 'Help',
               textColor: Colors.white,
-              onPressed: _handleRegister,
-            ) : null,
+              onPressed: _showOTPTroubleshootDialog,
+            ),
           ),
         );
       }
     } catch (e) {
       if (!mounted) return;
       
-      print('❌ Registration error: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Connection error: ${e.toString()}'),
+          content: const Text('Unable to send verification code'),
           backgroundColor: Colors.red,
-          duration: const Duration(seconds: 5),
+          duration: const Duration(seconds: 3),
+          action: SnackBarAction(
+            label: 'Help',
+            textColor: Colors.white,
+            onPressed: _showOTPTroubleshootDialog,
+          ),
         ),
       );
     } finally {
@@ -372,62 +322,128 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     }
   }
 
-  Future<void> _testConnection() async {
-    setState(() {
-      _isLoading = true;
-    });
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Waking up server... This may take 30-60 seconds on first try'),
-        duration: Duration(seconds: 3),
+  void _showOTPTroubleshootDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Need Help?'),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'If you\'re having trouble, please check:',
+                style: TextStyle(fontWeight: FontWeight.w500),
+              ),
+              const SizedBox(height: 16),
+              _buildTroubleshootStep('1', 'Phone number', 
+                'Verify your phone number is correct'),
+              const SizedBox(height: 12),
+              _buildTroubleshootStep('2', 'Network connection', 
+                'Check your internet connection'),
+              const SizedBox(height: 12),
+              _buildTroubleshootStep('3', 'Wait a moment', 
+                'Code may take up to 2 minutes'),
+              const SizedBox(height: 12),
+              _buildTroubleshootStep('4', 'Check messages', 
+                'Look in all message folders'),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.blue.shade200),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.support_agent, color: Colors.blue.shade700, size: 20),
+                        const SizedBox(width: 8),
+                        const Text(
+                          'Still need help?',
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Contact our support team for assistance.',
+                      style: TextStyle(fontSize: 13),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _handleSendOTP();
+            },
+            child: const Text('Try Again'),
+          ),
+        ],
       ),
     );
+  }
 
-    try {
-      print('🌐 Testing connection to: https://saferide-backend-04w2.onrender.com');
-      final response = await http.get(
-        Uri.parse('https://saferide-backend-04w2.onrender.com'),
-      ).timeout(const Duration(seconds: 90));
-
-      print('📊 Server response: ${response.statusCode}');
-
-      if (!mounted) return;
-
-      if (response.statusCode == 200) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('✅ Server is online and ready!'),
-            backgroundColor: Colors.green,
-            duration: Duration(seconds: 3),
+  Widget _buildTroubleshootStep(String number, String title, String description) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 24,
+          height: 24,
+          decoration: BoxDecoration(
+            color: AppTheme.primaryAccent,
+            shape: BoxShape.circle,
           ),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('⚠️ Server returned: ${response.statusCode}'),
-            backgroundColor: Colors.orange,
-            duration: const Duration(seconds: 3),
+          child: Center(
+            child: Text(
+              number,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
           ),
-        );
-      }
-    } catch (e) {
-      print('❌ Connection test failed: $e');
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('❌ Server unavailable: ${e.toString().contains('TimeoutException') ? 'Timeout - server may be starting up' : e.toString()}'),
-          backgroundColor: Colors.red,
-          duration: const Duration(seconds: 5),
         ),
-      );
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
-    }
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                description,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey[600],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
   }
 
   @override

@@ -64,7 +64,7 @@ class DefaultFirebaseOptions {
     messagingSenderId: '217467965491',
     projectId: 'alpha-flutter-health',
     storageBucket: 'alpha-flutter-health.firebasestorage.app',
-    iosBundleId: 'com.example.safeRide',
+    iosBundleId: 'com.example.safe_ride',
   );
 
   static const FirebaseOptions macos = FirebaseOptions(
@@ -73,7 +73,7 @@ class DefaultFirebaseOptions {
     messagingSenderId: '217467965491',
     projectId: 'alpha-flutter-health',
     storageBucket: 'alpha-flutter-health.firebasestorage.app',
-    iosBundleId: 'com.example.safeRide',
+    iosBundleId: 'com.example.safe_ride',
   );
 
   static const FirebaseOptions windows = FirebaseOptions(

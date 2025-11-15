@@ -25,7 +25,6 @@ class SafeRideApp extends StatefulWidget {
 }
 
 class _SafeRideAppState extends State<SafeRideApp> with WidgetsBindingObserver {
-  bool _initialized = false;
   bool _error = false;
   String _errorMessage = '';
 
@@ -143,9 +142,6 @@ class _SafeRideAppState extends State<SafeRideApp> with WidgetsBindingObserver {
         // Continue anyway - user can connect later after registration
       });
       
-      setState(() {
-        _initialized = true;
-      });
       print('✅ App initialized successfully');
       
     } catch (e) {
@@ -167,6 +163,8 @@ class _SafeRideAppState extends State<SafeRideApp> with WidgetsBindingObserver {
     final longitude = data['longitude'] ?? '0';
     final severity = data['severity'] ?? 'high';
     final time = DateTime.now().toIso8601String();
+
+    // Note: Notification is already saved by FcmService, no need to save again here
 
     showDialog(
       context: context,
@@ -374,9 +372,7 @@ class _SafeRideAppState extends State<SafeRideApp> with WidgetsBindingObserver {
       theme: AppTheme.lightTheme,
       home: _error
           ? _ErrorScreen(message: _errorMessage)
-          : _initialized
-              ? const AppInitializer()
-              : const _LoadingScreen(),
+          : const AppInitializer(),
     );
   }
 }
@@ -416,17 +412,17 @@ class _LoadingScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 16),
-            const CircularProgressIndicator(
-              valueColor: AlwaysStoppedAnimation(Colors.white),
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'Initializing...',
-              style: TextStyle(
-                fontSize: 16,
-                color: Colors.white70,
-              ),
-            ),
+            // const CircularProgressIndicator(
+            //   valueColor: AlwaysStoppedAnimation(Colors.white),
+            // ),
+            // const SizedBox(height: 16),
+            // const Text(
+            //   'Initializing...',
+            //   style: TextStyle(
+            //     fontSize: 16,
+            //     color: Colors.white70,
+            //   ),
+            // ),
           ],
         ),
       ),

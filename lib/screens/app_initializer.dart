@@ -6,7 +6,7 @@ import '../services/api_service.dart';
 import '../models/user.dart';
 import 'onboarding_screen.dart';
 import 'registration_screen.dart';
-import 'home_screen.dart';
+import 'main_screen.dart';
 
 class AppInitializer extends StatefulWidget {
   const AppInitializer({Key? key}) : super(key: key);
@@ -60,7 +60,7 @@ class _AppInitializerState extends State<AppInitializer> {
 
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (context) => HomeScreen(user: user)),
+        MaterialPageRoute(builder: (context) => MainScreen(user: user)),
       );
     } catch (e) {
       print('Error loading profile: $e');
@@ -101,7 +101,7 @@ class _AppInitializerState extends State<AppInitializer> {
               style: Theme.of(context).textTheme.displayLarge,
             ),
             const SizedBox(height: 16),
-            const LoadingIndicator(message: 'Initializing...'),
+            // const LoadingIndicator(message: 'Initializing...'),
           ],
         ),
       ),

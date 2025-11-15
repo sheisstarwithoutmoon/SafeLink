@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
-import '../theme/app_theme.dart';
-import '../widgets/status_indicator.dart';
-import '../services/bluetooth_service.dart';
-import '../services/socket_service.dart';
-import '../services/api_service.dart';
 import '../models/user.dart';
-import 'emergency_contacts_screen.dart';
+import '../services/bluetooth_service.dart';
+import '../services/api_service.dart';
+import '../services/storage_service.dart';
+import 'notification_history_screen.dart';
 import 'bluetooth_connection_screen.dart';
 import 'package:geolocator/geolocator.dart';
 
@@ -21,530 +19,990 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final BluetoothService _bluetoothService = BluetoothService();
+  final ApiService _apiService = ApiService();
+  final StorageService _storageService = StorageService();
   
-  ConnectionStatus _bluetoothStatus = ConnectionStatus.disconnected;
   StreamSubscription? _bluetoothDataSubscription;
+  StreamSubscription? _bluetoothConnectionSubscription;
+  bool _isMonitoring = false;
+  bool _isBluetoothConnected = false;
+  
+  // Real stats
+  int _alertsSent = 0;
+  int _alertsReceived = 0;
+  int _emergencyContactsCount = 0;
+  int _daysActive = 0;
+  String _lastAlertTime = 'Never';
+  bool _isLoadingStats = true;
 
   @override
   void initState() {
     super.initState();
-    _checkConnectionStatuses();
-    _setupListeners();
-    _setupBluetoothAccidentDetection();
+    _loadRealStats();
+    _setupBluetoothListener();
+    _setupBluetoothConnectionListener();
   }
 
-  void _checkConnectionStatuses() {
-    // Check Bluetooth status
+  Future<void> _loadRealStats() async {
     setState(() {
-      _bluetoothStatus = _bluetoothService.isConnected 
-          ? ConnectionStatus.connected 
-          : ConnectionStatus.disconnected;
+      _isLoadingStats = true;
     });
-  }
 
-  void _setupListeners() {
-    // Listen to Bluetooth connection changes
-    _bluetoothService.connectionStateStream.listen((state) {
-      if (mounted) {
+    try {
+      // Fetch both sent and received notifications from backend API
+      final sentResponse = await _apiService.getSentNotifications(limit: 100);
+      final receivedResponse = await _apiService.getReceivedNotifications(limit: 100);
+
+      int sentCount = 0;
+      int receivedCount = 0;
+      int? firstTimestamp;
+      int? lastTimestamp;
+
+      // Process sent notifications
+      if (sentResponse['success'] == true) {
+        final sentNotifications = (sentResponse['notifications'] as List<dynamic>?) ?? [];
+        sentCount = sentNotifications.length;
+
+        for (var notification in sentNotifications) {
+          final createdAt = notification['createdAt'] as String?;
+          if (createdAt != null) {
+            try {
+              final timestamp = DateTime.parse(createdAt).millisecondsSinceEpoch;
+              if (firstTimestamp == null || timestamp < firstTimestamp) {
+                firstTimestamp = timestamp;
+              }
+              if (lastTimestamp == null || timestamp > lastTimestamp) {
+                lastTimestamp = timestamp;
+              }
+            } catch (e) {
+              print('Error parsing date: $e');
+            }
+          }
+        }
+      }
+
+      // Process received notifications
+      if (receivedResponse['success'] == true) {
+        final receivedNotifications = (receivedResponse['notifications'] as List<dynamic>?) ?? [];
+        receivedCount = receivedNotifications.length;
+
+        for (var notification in receivedNotifications) {
+          final createdAt = notification['createdAt'] as String?;
+          if (createdAt != null) {
+            try {
+              final timestamp = DateTime.parse(createdAt).millisecondsSinceEpoch;
+              if (firstTimestamp == null || timestamp < firstTimestamp) {
+                firstTimestamp = timestamp;
+              }
+              if (lastTimestamp == null || timestamp > lastTimestamp) {
+                lastTimestamp = timestamp;
+              }
+            } catch (e) {
+              print('Error parsing date: $e');
+            }
+          }
+        }
+      }
+
+      // Calculate days active from first notification
+      int daysActive = 0;
+      if (firstTimestamp != null) {
+        final firstDate = DateTime.fromMillisecondsSinceEpoch(firstTimestamp);
+        final now = DateTime.now();
+        daysActive = now.difference(firstDate).inDays;
+      }
+
+      // Format last alert time (most recent notification)
+      String lastAlertFormatted = 'Never';
+      if (lastTimestamp != null) {
+        final lastDate = DateTime.fromMillisecondsSinceEpoch(lastTimestamp);
+        final now = DateTime.now();
+        final difference = now.difference(lastDate);
+
+        if (difference.inMinutes < 1) {
+          lastAlertFormatted = 'Just now';
+        } else if (difference.inHours < 1) {
+          lastAlertFormatted = '${difference.inMinutes}m ago';
+        } else if (difference.inDays < 1) {
+          lastAlertFormatted = '${difference.inHours}h ago';
+        } else if (difference.inDays < 7) {
+          lastAlertFormatted = '${difference.inDays}d ago';
+        } else {
+          lastAlertFormatted = '${(difference.inDays / 7).floor()}w ago';
+        }
+      }
+
+      // Get emergency contacts count from user object
+      int contactsCount = widget.user.emergencyContacts.length;
+
+      setState(() {
+        _alertsSent = sentCount;
+        _alertsReceived = receivedCount;
+        _emergencyContactsCount = contactsCount;
+        _daysActive = daysActive;
+        _lastAlertTime = lastAlertFormatted;
+        _isLoadingStats = false;
+      });
+
+      print('Stats loaded: Sent=$sentCount, Received=$receivedCount, Contacts=$contactsCount, Days=$daysActive');
+    } catch (e) {
+      print('Error loading stats from API: $e');
+      
+      // Fallback to local storage if API fails
+      try {
+        final notifications = await _storageService.getNotificationHistory();
+        
+        int sentCount = 0;
+        int receivedCount = 0;
+        int? firstTimestamp;
+        int? lastTimestamp;
+
+        for (var notification in notifications) {
+          final type = notification['type'] as String?;
+          final timestamp = notification['timestamp'] as int?;
+
+          if (type == 'sent') {
+            sentCount++;
+          } else {
+            receivedCount++;
+          }
+
+          if (timestamp != null) {
+            if (firstTimestamp == null || timestamp < firstTimestamp) {
+              firstTimestamp = timestamp;
+            }
+            if (lastTimestamp == null || timestamp > lastTimestamp) {
+              lastTimestamp = timestamp;
+            }
+          }
+        }
+
+        int daysActive = 0;
+        if (firstTimestamp != null) {
+          final firstDate = DateTime.fromMillisecondsSinceEpoch(firstTimestamp);
+          final now = DateTime.now();
+          daysActive = now.difference(firstDate).inDays;
+        }
+
+        String lastAlertFormatted = 'Never';
+        if (lastTimestamp != null) {
+          final lastDate = DateTime.fromMillisecondsSinceEpoch(lastTimestamp);
+          final now = DateTime.now();
+          final difference = now.difference(lastDate);
+
+          if (difference.inMinutes < 1) {
+            lastAlertFormatted = 'Just now';
+          } else if (difference.inHours < 1) {
+            lastAlertFormatted = '${difference.inMinutes}m ago';
+          } else if (difference.inDays < 1) {
+            lastAlertFormatted = '${difference.inHours}h ago';
+          } else if (difference.inDays < 7) {
+            lastAlertFormatted = '${difference.inDays}d ago';
+          } else {
+            lastAlertFormatted = '${(difference.inDays / 7).floor()}w ago';
+          }
+        }
+
+        int contactsCount = widget.user.emergencyContacts.length;
+
         setState(() {
-          _bluetoothStatus = state 
-              ? ConnectionStatus.connected 
-              : ConnectionStatus.disconnected;
+          _alertsSent = sentCount;
+          _alertsReceived = receivedCount;
+          _emergencyContactsCount = contactsCount;
+          _daysActive = daysActive;
+          _lastAlertTime = lastAlertFormatted;
+          _isLoadingStats = false;
+        });
+
+        print('Stats loaded from local storage (fallback): Sent=$sentCount, Received=$receivedCount');
+      } catch (storageError) {
+        print('Error loading from local storage: $storageError');
+        setState(() {
+          _isLoadingStats = false;
         });
       }
-    });
-  }
-
-  void _setupBluetoothAccidentDetection() {
-    // Listen to Bluetooth data for accident detection from Arduino
-    _bluetoothDataSubscription = _bluetoothService.dataStream.listen((data) {
-      // Check for accident keywords
-      if (data.contains('ACCIDENT') || data.contains('CRASH') || data.contains('ALERT')) {
-        // Extract magnitude/intensity if available
-        int magnitude = 0;
-        final intensityMatch = RegExp(r'INTENSITY:\s*(\d+)').firstMatch(data);
-        final magnitudeMatch = RegExp(r'MAGNITUDE:\s*(\d+)').firstMatch(data);
-        
-        if (intensityMatch != null) {
-          magnitude = int.tryParse(intensityMatch.group(1)!) ?? 0;
-        } else if (magnitudeMatch != null) {
-          magnitude = int.tryParse(magnitudeMatch.group(1)!) ?? 0;
-        }
-        
-        // Trigger emergency alert automatically
-        _handleAccidentDetected(magnitude);
-      }
-    });
-  }
-
-  void _handleAccidentDetected(int magnitude) {
-    if (!mounted) return;
-
-    // Show immediate alert
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => _AccidentDetectedDialog(
-        user: widget.user,
-        magnitude: magnitude,
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final hour = DateTime.now().hour;
-    String greeting = 'Good morning';
-    if (hour >= 12 && hour < 17) {
-      greeting = 'Good afternoon';
-    } else if (hour >= 17) {
-      greeting = 'Good evening';
     }
-
-    return Scaffold(
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Greeting
-              Text(
-                greeting,
-                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                  color: AppTheme.textSecondary,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                widget.user.name,
-                style: Theme.of(context).textTheme.displayLarge,
-              ),
-              
-              const SizedBox(height: 8),
-
-              Text(
-                'Stay Safe',
-                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                  color: AppTheme.textSecondary,
-                ),
-              ),
-
-              const SizedBox(height: 32),
-
-              // Feature cards
-              _buildFeatureCard(
-                icon: Icons.contacts,
-                title: 'Emergency Contacts',
-                description: '${widget.user.emergencyContacts.length} contacts',
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => EmergencyContactsScreen(user: widget.user),
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 16),
-
-              _buildFeatureCard(
-                icon: Icons.bluetooth,
-                title: 'Device Connection',
-                description: _bluetoothStatus == ConnectionStatus.connected 
-                    ? 'Connected' 
-                    : 'Not connected',
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const BluetoothConnectionScreen(),
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 48),
-
-              // Emergency status message
-              Center(
-                child: Text(
-                  'Automatic Protection Active',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    color: AppTheme.successGreen,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 8),
-              Center(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 32),
-                  child: Text(
-                    'Monitoring for accidents 24/7',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: AppTheme.textSecondary,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildFeatureCard({
-    required IconData icon,
-    required String title,
-    required String description,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: AppTheme.primaryBackground,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppTheme.borderGray),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 56,
-              height: 56,
-              decoration: BoxDecoration(
-                color: AppTheme.softGray,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(
-                icon,
-                size: 28,
-                color: AppTheme.primaryAccent,
-              ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    description,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: AppTheme.textSecondary,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const Icon(
-              Icons.chevron_right,
-              color: AppTheme.textSecondary,
-            ),
-          ],
-        ),
-      ),
-    );
   }
 
   @override
   void dispose() {
     _bluetoothDataSubscription?.cancel();
+    _bluetoothConnectionSubscription?.cancel();
     super.dispose();
   }
-}
 
-// Accident Detected Dialog with Countdown
-class _AccidentDetectedDialog extends StatefulWidget {
-  final User user;
-  final int magnitude;
-
-  const _AccidentDetectedDialog({
-    required this.user,
-    required this.magnitude,
-  });
-
-  @override
-  State<_AccidentDetectedDialog> createState() => _AccidentDetectedDialogState();
-}
-
-class _AccidentDetectedDialogState extends State<_AccidentDetectedDialog> {
-  int _countdown = 15;
-  Timer? _timer;
-  final ApiService _apiService = ApiService();
-  final SocketService _socketService = SocketService();
-
-  @override
-  void initState() {
-    super.initState();
-    _startCountdown();
+  void _setupBluetoothConnectionListener() {
+    _bluetoothConnectionSubscription = _bluetoothService.connectionStateStream.listen((isConnected) {
+      setState(() {
+        _isBluetoothConnected = isConnected;
+      });
+    });
   }
 
-  void _startCountdown() {
-    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (_countdown > 0) {
-        setState(() {
-          _countdown--;
-        });
-      } else {
-        timer.cancel();
-        _sendAlert();
+  void _setupBluetoothListener() {
+    _bluetoothDataSubscription = _bluetoothService.dataStream.listen((data) {
+      if (data.toLowerCase().contains('accident') || 
+          data.toLowerCase().contains('crash') ||
+          data.toLowerCase().contains('fall')) {
+        _handleAccidentDetection();
       }
+    });
+  }
+
+  Future<void> _handleAccidentDetection() async {
+    if (_isMonitoring) return;
+    
+    setState(() {
+      _isMonitoring = true;
+    });
+
+    // Show countdown dialog
+    _showCountdownDialog();
+  }
+
+  void _showCountdownDialog() {
+    int countdown = 15;
+    bool cancelled = false;
+
+    Navigator.of(context).push(
+      PageRouteBuilder(
+        opaque: false,
+        barrierDismissible: false,
+        pageBuilder: (BuildContext context, _, __) {
+          return StatefulBuilder(
+            builder: (context, setState) {
+              if (countdown > 0 && !cancelled) {
+                Future.delayed(const Duration(seconds: 1), () {
+                  if (!cancelled && countdown > 0) {
+                    setState(() {
+                      countdown--;
+                    });
+                  }
+                  if (countdown == 0 && !cancelled) {
+                    Navigator.of(context).pop();
+                    _sendAlert();
+                  }
+                });
+              }
+
+              return Material(
+                color: Colors.red.shade600,
+                child: SafeArea(
+                  child: SizedBox(
+                    width: double.infinity,
+                    height: double.infinity,
+                    child: SingleChildScrollView(
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(
+                          minHeight: MediaQuery.of(context).size.height - MediaQuery.of(context).padding.top - MediaQuery.of(context).padding.bottom,
+                        ),
+                        child: IntrinsicHeight(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const SizedBox(height: 20),
+                              // Pulsing warning icon
+                              TweenAnimationBuilder(
+                                tween: Tween<double>(begin: 0.8, end: 1.2),
+                                duration: const Duration(milliseconds: 500),
+                                builder: (context, double scale, child) {
+                                  return Transform.scale(
+                                    scale: scale,
+                                    child: Container(
+                                      padding: const EdgeInsets.all(24),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white.withOpacity(0.2),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: const Icon(
+                                        Icons.warning_rounded,
+                                        size: 80,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  );
+                                },
+                                onEnd: () {
+                                  if (mounted) {
+                                    setState(() {});
+                                  }
+                                },
+                              ),
+                              
+                              const SizedBox(height: 24),
+                              
+                              // Main title
+                              const Padding(
+                                padding: EdgeInsets.symmetric(horizontal: 20),
+                                child: Text(
+                                  'ACCIDENT DETECTED!',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 32,
+                                    fontWeight: FontWeight.bold,
+                                    letterSpacing: 2,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ),
+                              
+                              const SizedBox(height: 24),
+                              
+                              // Countdown circle
+                              Container(
+                                width: 160,
+                                height: 160,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: Colors.white,
+                                    width: 6,
+                                  ),
+                                ),
+                                child: Center(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Text(
+                                        '$countdown',
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 64,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      const Text(
+                                        'seconds',
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 16,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              
+                              const SizedBox(height: 32),
+                              
+                              // Message
+                              Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 24),
+                                child: Column(
+                                  children: [
+                                    const Text(
+                                      'Emergency alert will be sent to all contacts',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                    const SizedBox(height: 12),
+                                    Text(
+                                      'Location, time, and emergency details will be shared',
+                                      style: TextStyle(
+                                        color: Colors.white.withOpacity(0.9),
+                                        fontSize: 14,
+                                      ),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              
+                              const SizedBox(height: 32),
+                              
+                              // Cancel button
+                              Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 24),
+                                child: SizedBox(
+                                  width: double.infinity,
+                                  height: 56,
+                                  child: ElevatedButton(
+                                    onPressed: () {
+                                      cancelled = true;
+                                      Navigator.of(context).pop();
+                                      this.setState(() {
+                                        _isMonitoring = false;
+                                      });
+                                    },
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.white,
+                                      foregroundColor: Colors.red.shade700,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(16),
+                                      ),
+                                      elevation: 8,
+                                    ),
+                                    child: const Text(
+                                      "I'M SAFE - CANCEL ALERT",
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                        letterSpacing: 1,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 20),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
+          );
+        },
+      ),
+    ).then((_) {
+      setState(() {
+        _isMonitoring = false;
+      });
     });
   }
 
   Future<void> _sendAlert() async {
     try {
-      // Get location
-      Position position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
-      );
-
-      // Create alert via API (backend will send FCM notifications)
+      final position = await Geolocator.getCurrentPosition();
+      
       final result = await _apiService.createEmergencyAlert(
         userId: widget.user.id,
         latitude: position.latitude,
         longitude: position.longitude,
-        magnitude: widget.magnitude,
-        message: 'Accident detected by Safe Ride system',
       );
 
       if (result['success']) {
-        var alert = result['alert'];
-        print('Alert created successfully: ${alert['_id'] ?? alert['id']}');
+        // Save sent alert to local history with 'sent' type
+        final sentAlertData = {
+          'title': 'Alert Sent',
+          'body': 'Emergency alert sent to all contacts',
+          'userName': widget.user.name,
+          'userPhone': widget.user.phone,
+          'latitude': position.latitude.toString(),
+          'longitude': position.longitude.toString(),
+          'severity': 'high',
+          'timestamp': DateTime.now().millisecondsSinceEpoch,
+          'time': DateTime.now().toIso8601String(),
+          'type': 'sent', // Mark as sent by user
+          'status': 'delivered',
+        };
+        await StorageService().saveNotificationToHistory(sentAlertData);
         
-        // Try to send via Socket.IO for real-time updates (optional)
-        try {
-          // Ensure socket is connected
-          if (!_socketService.isConnected) {
-            print('Reconnecting socket...');
-            await _socketService.connect();
-            await Future.delayed(const Duration(milliseconds: 500));
-          }
-          
-          if (_socketService.isConnected) {
-            _socketService.createEmergency(
-              alertId: alert['_id'] ?? alert['id'],
-              latitude: position.latitude,
-              longitude: position.longitude,
-              magnitude: widget.magnitude,
-              address: 'Detected Location',
-            );
-            print('Socket emergency event sent');
-          } else {
-            print('Socket still not connected, skipping real-time update');
-          }
-        } catch (socketError) {
-          print('Socket error (non-critical): $socketError');
-          // Continue - alert was created via API, Socket.IO is optional
+        // Reload stats after sending alert
+        _loadRealStats();
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Emergency alert sent successfully\nLocation: ${position.latitude.toStringAsFixed(4)}, ${position.longitude.toStringAsFixed(4)}'),
+              backgroundColor: Colors.green,
+              duration: const Duration(seconds: 4),
+            ),
+          );
         }
-
-        if (!mounted) return;
-        Navigator.pop(context);
-        
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Emergency contacts notified'),
-            backgroundColor: Colors.green,
-            duration: Duration(seconds: 3),
-          ),
-        );
-      } else {
-        throw Exception(result['message'] ?? 'Failed to create alert');
       }
     } catch (e) {
       print('Error sending alert: $e');
-      if (!mounted) return;
-      Navigator.pop(context);
-      
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to send alert: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      setState(() {
+        _isMonitoring = false;
+      });
     }
-  }
-
-  void _cancelAlert() {
-    _timer?.cancel();
-    Navigator.pop(context);
-    
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Emergency alert cancelled'),
-        backgroundColor: Colors.orange,
-      ),
-    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    final isSmallScreen = screenWidth < 360;
-    final iconSize = isSmallScreen ? 100.0 : 120.0;
-    final titleSize = isSmallScreen ? 24.0 : 32.0;
-    final bodySize = isSmallScreen ? 14.0 : 18.0;
-    final countdownSize = isSmallScreen ? 180.0 : 200.0;
-    final countdownTextSize = isSmallScreen ? 80.0 : 96.0;
-    
-    return WillPopScope(
-      onWillPop: () async => false,
-      child: Dialog(
-        backgroundColor: Colors.transparent,
-        insetPadding: EdgeInsets.zero,
-        child: Container(
-          width: double.infinity,
-          height: double.infinity,
-          color: AppTheme.emergencyRed,
-          child: SafeArea(
-            child: Padding(
-              padding: EdgeInsets.symmetric(horizontal: isSmallScreen ? 16 : 32),
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Safe Ride'),
+        elevation: 0,
+        actions: [
+          // Bluetooth connection icon
+          IconButton(
+            icon: Icon(
+              _isBluetoothConnected ? Icons.bluetooth_connected : Icons.bluetooth,
+              color: _isBluetoothConnected ? Colors.green : Colors.grey,
+            ),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const BluetoothConnectionScreen(),
+                ),
+              );
+            },
+            tooltip: _isBluetoothConnected ? 'Helmet Connected' : 'Connect Helmet',
+          ),
+          // Notifications icon
+          IconButton(
+            icon: const Icon(Icons.notifications_rounded),
+            onPressed: () async {
+              await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const NotificationHistoryScreen(),
+                ),
+              );
+              // Reload stats when returning from notification history
+              _loadRealStats();
+            },
+            tooltip: 'Notifications',
+          ),
+        ],
+      ),
+      body: RefreshIndicator(
+        onRefresh: _loadRealStats,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Welcome Section
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                    Theme.of(context).colorScheme.primary.withOpacity(0.05),
+                  ],
+                ),
+              ),
               child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Pulsing warning icon
-                  TweenAnimationBuilder(
-                    tween: Tween<double>(begin: 0.9, end: 1.1),
-                    duration: const Duration(milliseconds: 600),
-                    curve: Curves.easeInOut,
-                    builder: (context, double scale, child) {
-                      return Transform.scale(
-                        scale: scale,
-                        child: Container(
-                          width: iconSize,
-                          height: iconSize,
-                          decoration: const BoxDecoration(
-                            color: Colors.white,
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(
-                            Icons.car_crash,
-                            size: iconSize * 0.53,
-                            color: AppTheme.emergencyRed,
-                          ),
-                        ),
-                      );
-                    },
-                    onEnd: () {
-                      if (mounted) setState(() {});
-                    },
-                  ),
-
-                  SizedBox(height: isSmallScreen ? 32 : 48),
-
                   Text(
-                    'ACCIDENT DETECTED',
+                    'Welcome back,',
                     style: TextStyle(
-                      fontSize: titleSize,
+                      fontSize: 16,
+                      color: Colors.grey[600],
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    widget.user.name,
+                    style: const TextStyle(
+                      fontSize: 28,
                       fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                      letterSpacing: 2,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-
-                  SizedBox(height: isSmallScreen ? 12 : 16),
-
-                  Padding(
-                    padding: EdgeInsets.symmetric(horizontal: isSmallScreen ? 16 : 32),
-                    child: Text(
-                      'Notifying emergency contacts with your location',
-                      style: TextStyle(
-                        fontSize: bodySize,
-                        color: Colors.white,
-                      ),
-                      textAlign: TextAlign.center,
                     ),
                   ),
-
-                  SizedBox(height: isSmallScreen ? 32 : 48),
-
-                  // Countdown
+                  const SizedBox(height: 16),
                   Container(
-                    width: countdownSize,
-                    height: countdownSize,
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
-                      shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white, width: 4),
-                    ),
-                    child: Center(
-                      child: Text(
-                        '$_countdown',
-                        style: TextStyle(
-                          fontSize: countdownTextSize,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
+                      color: Colors.green.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: Colors.green.withOpacity(0.3),
                       ),
                     ),
-                  ),
-
-                  SizedBox(height: isSmallScreen ? 16 : 24),
-
-                  Text(
-                    'seconds',
-                    style: TextStyle(
-                      fontSize: isSmallScreen ? 16 : 20,
-                      color: Colors.white70,
-                    ),
-                  ),
-
-                  SizedBox(height: isSmallScreen ? 32 : 48),
-
-                  // Cancel button
-                  Padding(
-                    padding: EdgeInsets.symmetric(horizontal: isSmallScreen ? 16 : 32),
-                    child: ElevatedButton(
-                      onPressed: _cancelAlert,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.white,
-                        foregroundColor: AppTheme.emergencyRed,
-                        padding: EdgeInsets.symmetric(
-                          horizontal: isSmallScreen ? 24 : 48,
-                          vertical: isSmallScreen ? 16 : 20,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.check_circle,
+                          color: Colors.green,
+                          size: 18,
                         ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(30),
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.check_circle, size: isSmallScreen ? 24 : 28),
-                          SizedBox(width: isSmallScreen ? 8 : 12),
-                          Flexible(
-                            child: Text(
-                              'I\'m OK - Cancel Alert',
-                              style: TextStyle(
-                                fontSize: isSmallScreen ? 16 : 20,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
+                        const SizedBox(width: 8),
+                        const Text(
+                          'Protection Active',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.green,
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
               ),
             ),
-          ),
+
+            const SizedBox(height: 24),
+
+            // Statistics Cards
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Your Safety Stats',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  _isLoadingStats
+                      ? const Center(
+                          child: Padding(
+                            padding: EdgeInsets.all(32.0),
+                            child: CircularProgressIndicator(),
+                          ),
+                        )
+                      : Column(
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: _buildStatCard(
+                                    icon: Icons.send_rounded,
+                                    title: 'Alerts Sent',
+                                    value: '$_alertsSent',
+                                    color: Colors.blue,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: _buildStatCard(
+                                    icon: Icons.notifications_active,
+                                    title: 'Alerts Received',
+                                    value: '$_alertsReceived',
+                                    color: Colors.orange,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: _buildStatCard(
+                                    icon: Icons.people,
+                                    title: 'Emergency Contacts',
+                                    value: '$_emergencyContactsCount',
+                                    color: Colors.green,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: _buildStatCard(
+                                    icon: Icons.calendar_today,
+                                    title: 'Days Active',
+                                    value: '$_daysActive',
+                                    color: Colors.purple,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: Colors.teal.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(
+                                  color: Colors.teal.withOpacity(0.3),
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(10),
+                                    decoration: BoxDecoration(
+                                      color: Colors.teal.withOpacity(0.2),
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    child: const Icon(
+                                      Icons.access_time,
+                                      color: Colors.teal,
+                                      size: 24,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 16),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        const Text(
+                                          'Last Alert',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          _lastAlertTime,
+                                          style: const TextStyle(
+                                            fontSize: 20,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.teal,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 32),
+
+            // Safety Tips Section
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Text(
+                        'Safety Tips',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const Spacer(),
+                      Icon(Icons.lightbulb, color: Colors.amber, size: 20),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  _buildSafetyTip(
+                    icon: Icons.speed,
+                    title: 'Maintain Safe Speed',
+                    description: 'Always ride within speed limits. Reduce speed in rain or traffic.',
+                    color: Colors.red,
+                  ),
+                  const SizedBox(height: 12),
+                  _buildSafetyTip(
+                    icon: Icons.remove_red_eye,
+                    title: 'Stay Alert',
+                    description: 'Keep your eyes on the road. Avoid distractions like phones.',
+                    color: Colors.blue,
+                  ),
+                  const SizedBox(height: 12),
+                  _buildSafetyTip(
+                    icon: Icons.wb_sunny,
+                    title: 'Check Weather',
+                    description: 'Avoid riding in extreme weather. Plan your route accordingly.',
+                    color: Colors.orange,
+                  ),
+                  const SizedBox(height: 12),
+                  _buildSafetyTip(
+                    icon: Icons.build,
+                    title: 'Regular Maintenance',
+                    description: 'Check brakes, tires, and lights regularly for optimal safety.',
+                    color: Colors.purple,
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 32),
+
+            // Did You Know Section
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      Colors.teal.shade50,
+                      Colors.blue.shade50,
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: Colors.teal.withOpacity(0.3),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.teal,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Icon(
+                            Icons.info,
+                            color: Colors.white,
+                            size: 20,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        const Text(
+                          'Did You Know?',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Wearing a helmet reduces the risk of head injury by 69% and death by 42% in motorcycle accidents.',
+                      style: TextStyle(
+                        fontSize: 14,
+                        height: 1.5,
+                        color: Colors.grey[800],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Always ensure your helmet is properly fastened before riding!',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.teal.shade700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 24),
+          ],
         ),
+      ),
       ),
     );
   }
 
-  @override
-  void dispose() {
-    _timer?.cancel();
-    super.dispose();
+  Widget _buildStatCard({
+    required IconData icon,
+    required String title,
+    required String value,
+    required Color color,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: color.withOpacity(0.3),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            icon,
+            color: color,
+            size: 28,
+          ),
+          const SizedBox(height: 12),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.grey[600],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSafetyTip({
+    required IconData icon,
+    required String title,
+    required String description,
+    required Color color,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: Colors.grey.shade200,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(
+              icon,
+              color: color,
+              size: 24,
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  description,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Colors.grey[600],
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

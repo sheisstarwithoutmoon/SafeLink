@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:firebase_auth/firebase_auth.dart';
 import '../config/api_config.dart';
 import 'storage_service.dart';
 
@@ -14,40 +15,54 @@ class ApiService {
     return await _storage.getUserId();
   }
 
-  Map<String, String> _getHeaders([String? userId]) {
+  Map<String, String> _getHeaders([String? userId, String? firebaseToken]) {
     final headers = {
       'Content-Type': 'application/json',
     };
     
-    if (userId != null) {
+    // Prefer Firebase token over user ID
+    if (firebaseToken != null) {
+      headers['Authorization'] = 'Bearer $firebaseToken';
+    } else if (userId != null) {
       headers['x-user-id'] = userId;
     }
     
     return headers;
   }
 
-  /// Register or login user
+  /// Register or login user with Firebase Authentication
   Future<Map<String, dynamic>> registerUser({
     String? phoneNumber,
     String? phone,
     String? name,
     String? fcmToken,
+    String? firebaseToken, // New: Firebase ID token
   }) async {
     try {
-      final phoneNum = phone ?? phoneNumber;
-      if (phoneNum == null) throw Exception('Phone number required');
-
       print('📡 Sending registration request to: ${ApiConfig.registerUrl}');
-      print('📞 Phone: $phoneNum, Name: $name');
+
+      final body = <String, dynamic>{};
+      
+      // Use Firebase token if available (new method)
+      if (firebaseToken != null) {
+        print('🔐 Using Firebase Authentication');
+        body['firebaseToken'] = firebaseToken;
+        if (name != null) body['name'] = name;
+        if (fcmToken != null) body['fcmToken'] = fcmToken;
+      } else {
+        // Fallback to old method (backward compatibility)
+        print('📞 Using legacy phone registration');
+        final phoneNum = phone ?? phoneNumber;
+        if (phoneNum == null) throw Exception('Phone number required');
+        body['phoneNumber'] = phoneNum;
+        if (name != null) body['name'] = name;
+        if (fcmToken != null) body['fcmToken'] = fcmToken;
+      }
 
       final response = await http.post(
         Uri.parse(ApiConfig.registerUrl),
         headers: _getHeaders(),
-        body: jsonEncode({
-          'phoneNumber': phoneNum,
-          'name': name,
-          'fcmToken': fcmToken,
-        }),
+        body: jsonEncode(body),
       ).timeout(ApiConfig.connectionTimeout);
 
       print('📊 Response status: ${response.statusCode}');
@@ -60,7 +75,19 @@ class ApiService {
         final userId = data['user']['_id'] ?? data['user']['id'];
         print('💾 Saving user ID: $userId');
         await _storage.saveUserId(userId);
-        return {'success': true, 'user': data['user']};
+        
+        // Save phone number if available
+        final userPhone = data['user']['phoneNumber'];
+        if (userPhone != null) {
+          await _storage.savePhoneNumber(userPhone);
+        }
+        
+        // Return with isNewUser flag (from backend or default to false)
+        return {
+          'success': true, 
+          'user': data['user'],
+          'isNewUser': data['isNewUser'] ?? false,
+        };
       } else {
         print('⚠️ Registration failed: ${data['error'] ?? data['message']}');
         return {'success': false, 'message': data['error'] ?? data['message'] ?? 'Registration failed'};
@@ -347,6 +374,160 @@ class ApiService {
     } catch (e) {
       print('Error in getAlertHistory: $e');
       rethrow;
+    }
+  }
+
+  /// Get received notifications (where you were alerted)
+  Future<Map<String, dynamic>> getReceivedNotifications({
+    int page = 1,
+    int limit = 20,
+    String? status,
+    String? firebaseToken,
+  }) async {
+    try {
+      // Build query parameters
+      final queryParams = {
+        'page': page.toString(),
+        'limit': limit.toString(),
+      };
+      if (status != null) {
+        queryParams['status'] = status;
+      }
+
+      final uri = Uri.parse('${ApiConfig.baseUrl}/api/alerts/notifications/received')
+          .replace(queryParameters: queryParams);
+
+      final token = firebaseToken ?? await _getFirebaseToken();
+      
+      final response = await http.get(
+        uri,
+        headers: _getHeaders(null, token),
+      ).timeout(ApiConfig.connectionTimeout);
+
+      final data = jsonDecode(response.body);
+
+      if (response.statusCode == 200) {
+        return {
+          'success': true,
+          'notifications': data['notifications'] ?? [],
+          'pagination': data['pagination'] ?? {},
+        };
+      } else {
+        return {
+          'success': false,
+          'message': data['error'] ?? 'Failed to fetch notifications',
+        };
+      }
+    } catch (e) {
+      print('Error in getReceivedNotifications: $e');
+      return {
+        'success': false,
+        'message': e.toString(),
+      };
+    }
+  }
+
+  /// Get sent notifications (alerts YOU created)
+  Future<Map<String, dynamic>> getSentNotifications({
+    int page = 1,
+    int limit = 20,
+    String? firebaseToken,
+  }) async {
+    try {
+      final queryParams = {
+        'page': page.toString(),
+        'limit': limit.toString(),
+      };
+
+      final uri = Uri.parse('${ApiConfig.baseUrl}/api/alerts/notifications/sent')
+          .replace(queryParameters: queryParams);
+
+      final token = firebaseToken ?? await _getFirebaseToken();
+      
+      final response = await http.get(
+        uri,
+        headers: _getHeaders(null, token),
+      ).timeout(ApiConfig.connectionTimeout);
+
+      final data = jsonDecode(response.body);
+
+      if (response.statusCode == 200) {
+        return {
+          'success': true,
+          'notifications': data['notifications'] ?? [],
+          'pagination': data['pagination'] ?? {},
+        };
+      } else {
+        return {
+          'success': false,
+          'message': data['error'] ?? 'Failed to fetch sent notifications',
+        };
+      }
+    } catch (e) {
+      print('Error in getSentNotifications: $e');
+      return {
+        'success': false,
+        'message': e.toString(),
+      };
+    }
+  }
+
+  /// Get all notifications (sent + received)
+  Future<Map<String, dynamic>> getAllNotifications({
+    int page = 1,
+    int limit = 20,
+    String? firebaseToken,
+  }) async {
+    try {
+      final queryParams = {
+        'page': page.toString(),
+        'limit': limit.toString(),
+      };
+
+      final uri = Uri.parse('${ApiConfig.baseUrl}/api/alerts/notifications/all')
+          .replace(queryParameters: queryParams);
+
+      final token = firebaseToken ?? await _getFirebaseToken();
+      
+      final response = await http.get(
+        uri,
+        headers: _getHeaders(null, token),
+      ).timeout(ApiConfig.connectionTimeout);
+
+      final data = jsonDecode(response.body);
+
+      if (response.statusCode == 200) {
+        return {
+          'success': true,
+          'notifications': data['notifications'] ?? [],
+          'pagination': data['pagination'] ?? {},
+        };
+      } else {
+        return {
+          'success': false,
+          'message': data['error'] ?? 'Failed to fetch notifications',
+        };
+      }
+    } catch (e) {
+      print('Error in getAllNotifications: $e');
+      return {
+        'success': false,
+        'message': e.toString(),
+      };
+    }
+  }
+
+  /// Helper method to get Firebase token
+  Future<String?> _getFirebaseToken() async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        return await user.getIdToken();
+      }
+      return null;
+    } catch (e) {
+      print('Error getting Firebase token: $e');
+      return null;
     }
   }
 }

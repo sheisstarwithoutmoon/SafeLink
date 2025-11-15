@@ -1,4 +1,5 @@
 import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
 
 class StorageService {
   static final StorageService _instance = StorageService._internal();
@@ -88,5 +89,49 @@ class StorageService {
   Future<void> clearLastNotification() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     await prefs.remove('last_notification');
+  }
+
+  // Save notification to history
+  Future<void> saveNotificationToHistory(Map<String, dynamic> notification) async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    
+    // Get existing notifications
+    List<String> notifications = prefs.getStringList('notification_history') ?? [];
+    
+    // Add timestamp if not present
+    if (!notification.containsKey('timestamp')) {
+      notification['timestamp'] = DateTime.now().millisecondsSinceEpoch;
+    }
+    
+    // Add new notification at the beginning
+    notifications.insert(0, jsonEncode(notification));
+    
+    // Keep only last 50 notifications
+    if (notifications.length > 50) {
+      notifications = notifications.sublist(0, 50);
+    }
+    
+    await prefs.setStringList('notification_history', notifications);
+  }
+
+  // Get all notifications from history
+  Future<List<Map<String, dynamic>>> getNotificationHistory() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    List<String> notifications = prefs.getStringList('notification_history') ?? [];
+    
+    return notifications.map((notificationString) {
+      try {
+        return jsonDecode(notificationString) as Map<String, dynamic>;
+      } catch (e) {
+        print('Error decoding notification: $e');
+        return <String, dynamic>{};
+      }
+    }).where((notification) => notification.isNotEmpty).toList();
+  }
+
+  // Clear notification history
+  Future<void> clearNotificationHistory() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    await prefs.remove('notification_history');
   }
 }
