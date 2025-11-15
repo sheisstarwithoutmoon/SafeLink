@@ -227,15 +227,23 @@ class _EmergencyTestPageState extends State<EmergencyTestPage> {
         }
       }
 
-      var contacts = await _apiService.addEmergencyContact(
+      var result = await _apiService.addEmergencyContact(
+        userId: userId!,
         phoneNumber: phone,
         name: _contactNameController.text.trim(),
         relationship: 'Emergency Contact',
         isPrimary: emergencyContacts.isEmpty,
       );
 
+      if (!result['success']) {
+        _showMessage(result['message'] ?? 'Failed to add contact');
+        return;
+      }
+
+      // Reload profile to get updated contacts
+      await _loadProfile();
+
       setState(() {
-        emergencyContacts = contacts;
         _contactPhoneController.clear();
         _contactNameController.clear();
       });
@@ -268,14 +276,23 @@ class _EmergencyTestPageState extends State<EmergencyTestPage> {
       );
 
       // Create alert via API
-      var alert = await _apiService.createAlert(
+      var result = await _apiService.createEmergencyAlert(
+        userId: userId!,
         latitude: position.latitude,
         longitude: position.longitude,
         magnitude: 85, // Test magnitude
+        message: 'Test emergency alert',
         address: 'Test Location',
         deviceInfo: 'Test Device',
         bluetoothDevice: 'HC-05 Test',
       );
+
+      if (!result['success']) {
+        _showMessage(result['message'] ?? 'Failed to create alert');
+        return;
+      }
+
+      var alert = result['alert'];
 
       setState(() {
         currentAlertId = alert['id'];
@@ -314,14 +331,23 @@ class _EmergencyTestPageState extends State<EmergencyTestPage> {
       );
 
       // Create alert via API with real Arduino data
-      var alert = await _apiService.createAlert(
+      var result = await _apiService.createEmergencyAlert(
+        userId: userId!,
         latitude: position.latitude,
         longitude: position.longitude,
         magnitude: magnitude,
+        message: 'Accident detected by Arduino accelerometer',
         address: 'Auto-detected Location',
         deviceInfo: 'Arduino HC-05 Accelerometer',
         bluetoothDevice: _bluetoothService.connectedDevice?.name ?? 'HC-05',
       );
+
+      if (!result['success']) {
+        _showMessage(result['message'] ?? 'Failed to create accident alert');
+        return;
+      }
+
+      var alert = result['alert'];
 
       setState(() {
         currentAlertId = alert['id'];

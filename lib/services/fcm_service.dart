@@ -1,7 +1,6 @@
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'storage_service.dart';
-import 'api_service.dart';
 
 // Background message handler (must be top-level function)
 @pragma('vm:entry-point')
@@ -19,7 +18,6 @@ class FcmService {
   final FirebaseMessaging _fcm = FirebaseMessaging.instance;
   final FlutterLocalNotificationsPlugin _localNotifications = FlutterLocalNotificationsPlugin();
   final StorageService _storage = StorageService();
-  final ApiService _api = ApiService();
 
   String? _fcmToken;
   String? get fcmToken => _fcmToken;
@@ -130,6 +128,19 @@ class FcmService {
   }
 
   Future<void> _showLocalNotification(RemoteMessage message) async {
+    // Extract alert data
+    final userName = message.data['userName'] ?? 'Unknown';
+    final userPhone = message.data['userPhoneNumber'] ?? 'Unknown';
+    final latitude = message.data['latitude'];
+    final longitude = message.data['longitude'];
+    final severity = message.data['severity'] ?? 'high';
+    
+    // Build enhanced notification body
+    String body = '${userName} may have been in an accident\n';
+    body += 'Location: ${latitude ?? 'Unknown'}, ${longitude ?? 'Unknown'}\n';
+    body += 'Severity: ${severity}\n';
+    body += 'Tap to view details and navigate';
+    
     const androidDetails = AndroidNotificationDetails(
       'emergency_alerts',
       'Emergency Alerts',
@@ -140,6 +151,7 @@ class FcmService {
       icon: '@mipmap/ic_launcher',
       playSound: true,
       enableVibration: true,
+      styleInformation: BigTextStyleInformation(''),
     );
 
     const iosDetails = DarwinNotificationDetails(
@@ -153,18 +165,32 @@ class FcmService {
       iOS: iosDetails,
     );
 
+    // Create payload with all alert data
+    String payload = '';
+    if (latitude != null && longitude != null) {
+      payload = 'alert:${message.data['alertId'] ?? 'unknown'}|';
+      payload += 'name:$userName|';
+      payload += 'phone:$userPhone|';
+      payload += 'lat:$latitude|';
+      payload += 'lng:$longitude|';
+      payload += 'severity:$severity|';
+      payload += 'time:${DateTime.now().toIso8601String()}';
+    }
+
     await _localNotifications.show(
       message.notification.hashCode,
-      message.notification?.title ?? 'Emergency Alert',
-      message.notification?.body ?? 'Someone needs help!',
+      message.notification?.title ?? '🚨 EMERGENCY ALERT',
+      body,
       notificationDetails,
-      payload: message.data.toString(),
+      payload: payload.isNotEmpty ? payload : null,
     );
   }
 
-  void _onNotificationTapped(NotificationResponse response) {
+  void _onNotificationTapped(NotificationResponse response) async {
     print('Notification tapped: ${response.payload}');
-    // Handle notification tap - navigate to appropriate screen
+    
+    // Notification tap will trigger onMessageOpenedApp which shows the dialog
+    // Payload is handled by the main app callback
   }
 
   Future<String?> getToken() async {

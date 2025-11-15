@@ -1,11 +1,9 @@
 class ApiConfig {
-  // Backend API URL - Update this with your actual backend URL
-  // Use your computer's IP address when testing on physical device
-  // Use 'http://localhost:5000' when using Android emulator
-  static const String baseUrl = 'http://192.168.17.113:5000';
+  // Production Backend URL (Render deployment)
+  static const String baseUrl = 'https://saferide-backend-04w2.onrender.com';
   static const String apiUrl = '$baseUrl/api';
   
-  // Socket.IO URL
+  // Socket.IO URL (uses WSS for secure WebSocket)
   static const String socketUrl = baseUrl;
   
   // API Endpoints
@@ -15,7 +13,7 @@ class ApiConfig {
   static const String settingsUrl = '$apiUrl/users/settings';
   static const String alertsUrl = '$apiUrl/alerts';
   
-  // Timeouts
-  static const Duration connectionTimeout = Duration(seconds: 30);
-  static const Duration receiveTimeout = Duration(seconds: 30);
+  // Timeouts (increased for Render cold starts)
+  static const Duration connectionTimeout = Duration(seconds: 90);
+  static const Duration receiveTimeout = Duration(seconds: 90);
 }

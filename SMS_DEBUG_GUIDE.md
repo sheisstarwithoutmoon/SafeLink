@@ -1,14 +1,14 @@
-# 🔧 SMS Debugging Guide
+# SMS Debugging Guide
 
-Your Firebase Functions are now properly deployed! Here's how to test and debug the SMS functionality:
+Your Firebase Functions are now properly deployed. Here's how to test and debug the SMS functionality:
 
-## ✅ Current Status
-- ✅ Firebase Functions deployed successfully
-- ✅ `sendEmergencySMS` is now callable (not https)
-- ✅ Twilio secrets configured
-- ✅ Flutter app updated with cloud_functions
+## Current Status
+- Firebase Functions deployed successfully
+- `sendEmergencySMS` is callable
+- Twilio secrets configured
+- Flutter app updated with cloud_functions
 
-## 🧪 Testing Steps
+## Testing Steps
 
 ### 1. Test in Flutter App
 1. **Run the app:**
@@ -17,7 +17,7 @@ Your Firebase Functions are now properly deployed! Here's how to test and debug 
    ```
 
 2. **Set emergency contact:**
-   - Open app → Settings (⚙️)
+   - Open app → Settings
    - Enter your phone number (e.g., +1234567890)
    - Save settings
 
@@ -41,7 +41,7 @@ firebase functions:log --only sendEmergencySMS
 2. Navigate to Monitor → Logs → Messages
 3. Look for sent messages
 
-## 🚨 Common Issues & Solutions
+## Common Issues & Solutions
 
 ### Issue 1: "Function not found"
 **Solution:**
@@ -69,7 +69,7 @@ firebase functions:secrets:access TWILIO_PHONE_NUMBER
 flutter logs
 ```
 
-## 🔍 Debugging Commands
+## Debugging Commands
 
 ### Check Function Status
 ```bash
@@ -93,7 +93,7 @@ sendEmergencySMS({phoneNumber: '+1234567890', message: 'Test message'})
 firebase firestore:get emergency_alerts
 ```
 
-## 📱 Flutter App Testing
+## Flutter App Testing
 
 ### Test Scenarios:
 
@@ -112,23 +112,23 @@ firebase firestore:get emergency_alerts
    - Try SMS test
    - Should fall back to URL launcher
 
-## 🎯 Expected Behavior
+## Expected Behavior
 
 ### Successful SMS:
-- ✅ App shows "Sending emergency alert..."
-- ✅ App shows "✅ Emergency alert sent successfully!"
-- ✅ Phone receives SMS with:
+ - App shows "Sending emergency alert..."
+ - App shows "Emergency alert sent successfully!"
+ - Phone receives SMS with:
   - Accident alert message
   - Location (Google Maps link)
   - Impact intensity
   - Timestamp
 
 ### Failed SMS:
-- ❌ App shows "Failed to send SMS: [error]"
-- ❌ Falls back to URL launcher
-- ❌ Logs error to Firestore
+ - App shows "Failed to send SMS: [error]"
+ - Falls back to URL launcher
+ - Logs error to Firestore
 
-## 📊 Monitoring
+## Monitoring
 
 ### Firebase Console:
 1. **Functions** → Check deployment status
@@ -140,14 +140,14 @@ firebase firestore:get emergency_alerts
 2. **Phone Numbers** → Verify your Twilio number
 3. **Account** → Check balance
 
-## 🚀 Next Steps
+## Next Steps
 
-1. **Test the app** with the steps above
-2. **Check logs** if SMS doesn't work
-3. **Verify Twilio setup** if errors occur
-4. **Report specific errors** for further debugging
+1. Test the app with the steps above
+2. Check logs if SMS doesn't work
+3. Verify Twilio setup if errors occur
+4. Report specific errors for further debugging
 
-## 📞 Support
+## Support
 
 If you encounter specific errors, please share:
 1. The exact error message

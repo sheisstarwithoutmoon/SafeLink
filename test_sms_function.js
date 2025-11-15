@@ -11,7 +11,7 @@ async function testSMSFunction() {
     // Test data
     const testData = {
       phoneNumber: '+1234567890', // Replace with your test number
-      message: '🚨 TEST ACCIDENT ALERT!\nThis is a test message from Safe Ride App.',
+      message: 'TEST ACCIDENT ALERT!\nThis is a test message from Safe Ride App.',
       location: {
         latitude: 40.7128,
         longitude: -74.0060
@@ -25,11 +25,11 @@ async function testSMSFunction() {
     // Call the function
     const result = await admin.functions().httpsCallable('sendEmergencySMS')(testData);
     
-    console.log('✅ Function call successful!');
+    console.log('Function call successful!');
     console.log('Result:', result.data);
     
   } catch (error) {
-    console.error('❌ Function call failed:');
+    console.error('Function call failed:');
     console.error('Error:', error.message);
     console.error('Code:', error.code);
     console.error('Details:', error.details);

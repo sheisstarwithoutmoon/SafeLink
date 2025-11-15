@@ -1,26 +1,26 @@
-# 🚀 Quick Start Guide - Safe Ride Backend Integration
+# Quick Start Guide - Safe Ride Backend Integration
 
-## Problem Fixed ✅
+## Problem Fixed
 Your app was still using the **OLD Firebase Functions SMS service** which was failing. We've now switched to the **NEW custom backend** with FREE push notifications!
 
 ## What Changed
 
 ### Before (Old System - Firebase Functions):
-- ❌ Used expensive Twilio SMS ($$$)
-- ❌ Firebase Functions errors
-- ❌ No real-time updates
-- ❌ Limited to SMS only
+- Used expensive Twilio SMS ($$$)
+- Firebase Functions errors
+- No real-time updates
+- Limited to SMS only
 
 ### After (New System - Custom Backend):
-- ✅ FREE push notifications via FCM
-- ✅ Real-time location updates via Socket.IO
-- ✅ 15-second countdown to cancel
-- ✅ Works even when app is closed
-- ✅ No costs for alerts
+- FREE push notifications via FCM
+- Real-time location updates via Socket.IO
+- 15-second countdown to cancel
+- Works even when app is closed
+- No costs for alerts
 
 ## Step-by-Step Setup
 
-### 1️⃣ Start MongoDB (If Local)
+### 1. Start MongoDB (If Local)
 
 **Option A: Windows Service**
 ```powershell
@@ -42,7 +42,7 @@ cd "C:\Program Files\MongoDB\Server\7.0\bin"
 - Get connection string
 - Update `backend/.env` with: `MONGODB_URI=mongodb+srv://...`
 
-### 2️⃣ Setup Backend
+### 2. Setup Backend
 
 ```powershell
 # Navigate to backend folder
@@ -63,18 +63,18 @@ FIREBASE_SERVICE_ACCOUNT_PATH=./firebase-service-account.json
 NODE_ENV=development
 ```
 
-### 3️⃣ Get Firebase Service Account
+### 3. Get Firebase Service Account
 
 1. Go to [Firebase Console](https://console.firebase.google.com)
 2. Select your project: **alpha-flutter-health**
-3. Click ⚙️ (Settings) → **Project Settings**
+3. Click (Settings) → **Project Settings**
 4. Go to **Service Accounts** tab
 5. Click **Generate New Private Key**
 6. Download the JSON file
 7. Rename it to: `firebase-service-account.json`
 8. Place it in: `c:\flutter_projects\safe_ride\backend\`
 
-### 4️⃣ Start Backend Server
+### 4. Start Backend Server
 
 ```powershell
 # From backend folder
@@ -89,13 +89,13 @@ npm run dev
 
 **Expected Output:**
 ```
-🚀 Server running on port 5000
-✓ MongoDB connected successfully
-✓ Firebase Admin initialized
-✓ Socket.IO initialized
+Server running on port 5000
+MongoDB connected successfully
+Firebase Admin initialized
+Socket.IO initialized
 ```
 
-### 5️⃣ Run Flutter App
+### 5. Run Flutter App
 
 ```powershell
 # From project root
@@ -113,28 +113,28 @@ flutter run
    - Enter your name
    - Enter phone: `+916261795658` or just `6261795658`
    - Click "Register"
-   - ✅ Should show "Registration successful!"
+   - Should show "Registration successful!"
 
 2. **Add Emergency Contact**
    - Enter contact name (e.g., "Mom", "Wife")
    - Enter phone: `+919876543210` or just `9876543210`
    - Click "Add Contact"
-   - ✅ Contact appears in list below
+   - Contact appears in list below
 
 3. **Create Test Alert**
-   - Click "🚨 CREATE TEST ALERT" button
-   - ✅ Countdown dialog appears (15 seconds)
+   - Click "CREATE TEST ALERT" button
+   - Countdown dialog appears (15 seconds)
    - Option 1: Click "Cancel Alert" to test cancellation
    - Option 2: Wait 15 seconds for alert to send
 
 4. **Verify Alert Sent**
-   - ✅ Emergency contacts receive **push notification**
-   - ✅ Socket.IO shows real-time updates
-   - ✅ Check backend console for logs
+   - Emergency contacts receive **push notification**
+   - Socket.IO shows real-time updates
+   - Check backend console for logs
 
 ## Troubleshooting
 
-### ❌ Backend Won't Start
+### Backend Won't Start
 
 **Error: MongoDB connection failed**
 ```
@@ -159,7 +159,7 @@ Solution:
 3. Check path in .env file
 ```
 
-### ❌ Flutter App Errors
+### Flutter App Errors
 
 **Error: Socket not connecting**
 ```
@@ -185,7 +185,7 @@ Solution:
 3. Try creating alert again
 ```
 
-### ❌ No Push Notifications
+### No Push Notifications
 
 **Contact not receiving notifications**
 ```

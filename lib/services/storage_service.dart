@@ -8,6 +8,7 @@ class StorageService {
   static const String _emergencyContactKey = 'emergency_contact';
   static const String _userIdKey = 'user_id';
   static const String _fcmTokenKey = 'fcm_token';
+  static const String _onboardingKey = 'onboarding_completed';
 
   Future<String?> getUserId() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
@@ -39,6 +40,16 @@ class StorageService {
     await prefs.remove(_fcmTokenKey);
   }
 
+  Future<String?> getPhoneNumber() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    return prefs.getString('phone_number');
+  }
+
+  Future<void> savePhoneNumber(String phone) async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    await prefs.setString('phone_number', phone);
+  }
+
   Future<String> getEmergencyContact() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     return prefs.getString(_emergencyContactKey) ?? "";
@@ -52,5 +63,30 @@ class StorageService {
   Future<void> clearEmergencyContact() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     await prefs.remove(_emergencyContactKey);
+  }
+
+  Future<bool> isOnboardingCompleted() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_onboardingKey) ?? false;
+  }
+
+  Future<void> saveOnboardingCompleted() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_onboardingKey, true);
+  }
+
+  Future<void> saveLastNotification(String payload) async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    await prefs.setString('last_notification', payload);
+  }
+
+  Future<String?> getLastNotification() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    return prefs.getString('last_notification');
+  }
+
+  Future<void> clearLastNotification() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    await prefs.remove('last_notification');
   }
 }
