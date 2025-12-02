@@ -25,13 +25,13 @@ class SMSService {
         }
         // Otherwise, show error
         else {
-          throw Exception('Please enter phone number with country code (e.g., +916261795658)');
+          throw Exception('Please enter phone number with country code (e.g., +91XXXXXXXXXX)');
         }
       }
       
       // Validate phone number
       if (!RegExp(r'^\+[0-9]{10,15}$').hasMatch(cleanedNumber)) {
-        throw Exception('Invalid phone number format. Use: +916261795658');
+        throw Exception('Invalid phone number format. Use: +91XXXXXXXXXX');
       }
 
       print('=== SENDING SMS ===');

@@ -26,6 +26,8 @@ class _HomeScreenState extends State<HomeScreen> {
   StreamSubscription? _bluetoothConnectionSubscription;
   bool _isMonitoring = false;
   bool _isBluetoothConnected = false;
+  String _bluetoothDataBuffer = '';
+  DateTime? _lastAccidentDetection;
   
   // Real stats
   int _alertsSent = 0;
@@ -241,9 +243,32 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _setupBluetoothListener() {
     _bluetoothDataSubscription = _bluetoothService.dataStream.listen((data) {
-      if (data.toLowerCase().contains('accident') || 
-          data.toLowerCase().contains('crash') ||
-          data.toLowerCase().contains('fall')) {
+      // Add data to buffer
+      _bluetoothDataBuffer += data.toLowerCase();
+      
+      // Keep buffer to reasonable size (last 500 characters)
+      if (_bluetoothDataBuffer.length > 500) {
+        _bluetoothDataBuffer = _bluetoothDataBuffer.substring(_bluetoothDataBuffer.length - 500);
+      }
+      
+      // Wait for Arduino's timer to complete before showing app dialog
+      // Only trigger when Arduino confirms: "ACCIDENT ALERT" or "alert timer: 0s"
+      if (_bluetoothDataBuffer.contains('accident alert') || 
+          _bluetoothDataBuffer.contains('alert timer: 0s')) {
+        
+        // Prevent multiple triggers within 20 seconds
+        final now = DateTime.now();
+        if (_lastAccidentDetection != null) {
+          final timeSinceLastDetection = now.difference(_lastAccidentDetection!);
+          if (timeSinceLastDetection.inSeconds < 20) {
+            print('⏸️ Accident detected but ignoring (cooldown: ${timeSinceLastDetection.inSeconds}s)');
+            return;
+          }
+        }
+        
+        print('🚨 ARDUINO TIMER COMPLETED! Showing app countdown dialog...');
+        _lastAccidentDetection = now;
+        _bluetoothDataBuffer = ''; // Clear buffer after detection
         _handleAccidentDetection();
       }
     });

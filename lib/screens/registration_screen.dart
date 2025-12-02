@@ -42,7 +42,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
       case '+44':
         return '7400123456';
       case '+91':
-        return '6261795658';
+        return 'XXXXXXXXXX';
       case '+86':
         return '13800138000';
       case '+81':

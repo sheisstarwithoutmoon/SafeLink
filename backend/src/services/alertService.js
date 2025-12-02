@@ -75,8 +75,8 @@ class AlertService {
       const notificationResults = [];
 
       for (const contact of user.emergencyContacts) {
-        const result = await this.sendEmergencyNotification(contact, alert, user, io);
-        notificationResults.push(result);
+        const results = await this.sendEmergencyNotification(contact, alert, user, io);
+        notificationResults.push(...results); // Flatten array since each contact can have multiple notification methods
       }
 
       alert.notificationsSent = notificationResults;
@@ -102,13 +102,7 @@ class AlertService {
    * Send emergency notification to a contact
    */
   async sendEmergencyNotification(contact, alert, user, io) {
-    const result = {
-      contactPhoneNumber: contact.phoneNumber,
-      method: null,
-      status: 'failed',
-      sentAt: new Date(),
-      error: null,
-    };
+    const results = [];
 
     try {
       // Check if contact has the app installed
@@ -122,14 +116,42 @@ class AlertService {
         longitude: alert.location.longitude,
         userPhoneNumber: user.phoneNumber,
         userName: user.name || 'Unknown',
+        userId: user._id.toString(), // Add userId for filtering own notifications
       };
 
+      // ALWAYS send SMS to ensure delivery
+      const smsResult = {
+        contactPhoneNumber: contact.phoneNumber,
+        method: 'sms',
+        status: 'failed',
+        sentAt: new Date(),
+        error: null,
+      };
+
+      try {
+        await smsService.sendEmergencyAlertSMS(contact.phoneNumber, alertData);
+        smsResult.status = 'sent';
+        console.log(`✅ SMS sent to ${contact.phoneNumber}`);
+      } catch (smsError) {
+        smsResult.error = smsError.message;
+        console.error(`❌ SMS failed for ${contact.phoneNumber}:`, smsError.message);
+      }
+      results.push(smsResult);
+
+      // ALSO send FCM push notification if contact has the app
       if (contactUser && contactUser.fcmToken) {
-        // Contact has app - send push notification
+        const fcmResult = {
+          contactPhoneNumber: contact.phoneNumber,
+          method: 'push',
+          status: 'failed',
+          sentAt: new Date(),
+          error: null,
+        };
+
         try {
           await fcmService.sendEmergencyAlert(contactUser.fcmToken, alertData);
-          result.method = 'push';
-          result.status = 'sent';
+          fcmResult.status = 'sent';
+          console.log(`✅ FCM push sent to ${contact.phoneNumber}`);
 
           // Also send via Socket.io if online
           if (contactUser.socketId) {
@@ -137,36 +159,25 @@ class AlertService {
               ...alertData,
               contactName: contact.name,
             });
+            console.log(`✅ Socket.io event sent to ${contact.phoneNumber}`);
           }
         } catch (fcmError) {
-          console.error('FCM failed, falling back to SMS:', fcmError.message);
-          // Fallback to SMS
-          await this.sendSMSFallback(contact.phoneNumber, alertData, result);
+          fcmResult.error = fcmError.message;
+          console.error(`❌ FCM failed for ${contact.phoneNumber}:`, fcmError.message);
         }
-      } else {
-        // Contact doesn't have app - send SMS
-        await this.sendSMSFallback(contact.phoneNumber, alertData, result);
+        results.push(fcmResult);
       }
 
-      return result;
+      return results;
     } catch (error) {
-      result.error = error.message;
       console.error(`❌ Error sending notification to ${contact.phoneNumber}:`, error);
-      return result;
-    }
-  }
-
-  /**
-   * Send SMS fallback
-   */
-  async sendSMSFallback(phoneNumber, alertData, result) {
-    try {
-      await smsService.sendEmergencyAlertSMS(phoneNumber, alertData);
-      result.method = 'sms';
-      result.status = 'sent';
-    } catch (smsError) {
-      result.error = smsError.message;
-      throw smsError;
+      return [{
+        contactPhoneNumber: contact.phoneNumber,
+        method: null,
+        status: 'failed',
+        sentAt: new Date(),
+        error: error.message,
+      }];
     }
   }
 
