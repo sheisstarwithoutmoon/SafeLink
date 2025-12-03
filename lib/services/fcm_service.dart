@@ -230,7 +230,7 @@ class FcmService {
 
     await _localNotifications.show(
       message.notification.hashCode,
-      message.notification?.title ?? '🚨 EMERGENCY ALERT',
+      message.notification?.title ?? 'EMERGENCY ALERT',
       body,
       notificationDetails,
       payload: payload.isNotEmpty ? payload : null,

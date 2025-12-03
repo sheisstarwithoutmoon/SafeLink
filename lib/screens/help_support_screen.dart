@@ -162,9 +162,9 @@ class HelpSupportScreen extends StatelessWidget {
                   const SizedBox(height: 8),
                   const Text(
                     'In case of a real emergency, always call your local emergency number:\n\n'
-                    '🚨 Emergency: 911 (US)\n'
-                    '🚨 Emergency: 112 (EU)\n'
-                    '🚨 Emergency: 100 (India)',
+                    'Emergency: 911 (US)\n'
+                    'Emergency: 112 (EU)\n'
+                    'Emergency: 100 (India)',
                     style: TextStyle(
                       fontSize: 13,
                       height: 1.4,

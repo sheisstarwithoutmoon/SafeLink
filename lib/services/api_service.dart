@@ -39,19 +39,19 @@ class ApiService {
     String? firebaseToken, // New: Firebase ID token
   }) async {
     try {
-      print('📡 Sending registration request to: ${ApiConfig.registerUrl}');
+      print('Sending registration request to: ${ApiConfig.registerUrl}');
 
       final body = <String, dynamic>{};
       
       // Use Firebase token if available (new method)
       if (firebaseToken != null) {
-        print('🔐 Using Firebase Authentication');
+        print('Using Firebase Authentication');
         body['firebaseToken'] = firebaseToken;
         if (name != null) body['name'] = name;
         if (fcmToken != null) body['fcmToken'] = fcmToken;
       } else {
         // Fallback to old method (backward compatibility)
-        print('📞 Using legacy phone registration');
+        print('Using legacy phone registration');
         final phoneNum = phone ?? phoneNumber;
         if (phoneNum == null) throw Exception('Phone number required');
         body['phoneNumber'] = phoneNum;
@@ -65,15 +65,15 @@ class ApiService {
         body: jsonEncode(body),
       ).timeout(ApiConfig.connectionTimeout);
 
-      print('📊 Response status: ${response.statusCode}');
-      print('📄 Response body: ${response.body}');
+      print('Response status: ${response.statusCode}');
+      print('Response body: ${response.body}');
 
       final data = jsonDecode(response.body);
 
       if (response.statusCode == 200 && data['success'] == true) {
         // Save user ID locally
         final userId = data['user']['_id'] ?? data['user']['id'];
-        print('💾 Saving user ID: $userId');
+        print('Saving user ID: $userId');
         await _storage.saveUserId(userId);
         
         // Save phone number if available
@@ -89,11 +89,11 @@ class ApiService {
           'isNewUser': data['isNewUser'] ?? false,
         };
       } else {
-        print('⚠️ Registration failed: ${data['error'] ?? data['message']}');
+        print('Registration failed: ${data['error'] ?? data['message']}');
         return {'success': false, 'message': data['error'] ?? data['message'] ?? 'Registration failed'};
       }
     } catch (e) {
-      print('❌ Error in registerUser: $e');
+      print('Error in registerUser: $e');
       if (e.toString().contains('TimeoutException')) {
         return {'success': false, 'message': 'Server timeout. Please check your internet connection.'};
       } else if (e.toString().contains('SocketException')) {
@@ -217,18 +217,18 @@ class ApiService {
     try {
       final userId = await _getUserId();
       if (userId == null) {
-        print('⚠️ Cannot update FCM token: User not logged in');
+        print('Cannot update FCM token: User not logged in');
         return;
       }
 
       // Get user's phone number from storage
       final phone = await _storage.getPhoneNumber();
       if (phone == null) {
-        print('⚠️ Cannot update FCM token: Phone number not found');
+        print('Cannot update FCM token: Phone number not found');
         return;
       }
 
-      print('🔄 Updating FCM token on backend...');
+      print('Updating FCM token on backend...');
       
       // Call register endpoint to update token
       final response = await http.post(
@@ -243,12 +243,12 @@ class ApiService {
       final data = jsonDecode(response.body);
       
       if (response.statusCode == 200 && data['success'] == true) {
-        print('✅ FCM token updated successfully');
+        print('FCM token updated successfully');
       } else {
-        print('⚠️ Failed to update FCM token: ${data['error']}');
+        print('Failed to update FCM token: ${data['error']}');
       }
     } catch (e) {
-      print('❌ Error updating FCM token: $e');
+      print('Error updating FCM token: $e');
     }
   }
 

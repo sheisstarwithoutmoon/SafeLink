@@ -47,20 +47,20 @@ class _SafeRideAppState extends State<SafeRideApp> with WidgetsBindingObserver {
     
     switch (state) {
       case AppLifecycleState.resumed:
-        print('📱 App resumed - reconnecting Socket.IO...');
+        print('App resumed - reconnecting Socket.IO...');
         _reconnectSocket();
         break;
       case AppLifecycleState.paused:
-        print('📱 App paused');
+        print('App paused');
         break;
       case AppLifecycleState.inactive:
-        print('📱 App inactive');
+        print('App inactive');
         break;
       case AppLifecycleState.detached:
-        print('📱 App detached');
+        print('App detached');
         break;
       case AppLifecycleState.hidden:
-        print('📱 App hidden');
+        print('App hidden');
         break;
     }
   }
@@ -73,7 +73,7 @@ class _SafeRideAppState extends State<SafeRideApp> with WidgetsBindingObserver {
         await SocketService().connect();
       }
     } catch (e) {
-      print('⚠️ Socket reconnection failed: $e');
+      print('Socket reconnection failed: $e');
     }
   }
 
@@ -82,24 +82,24 @@ class _SafeRideAppState extends State<SafeRideApp> with WidgetsBindingObserver {
       // Ensure Flutter bindings are initialized
       WidgetsFlutterBinding.ensureInitialized();
       
-      print('🚀 Initializing Safe Ride...');
+      print('Initializing Safe Ride...');
       
       // Initialize Firebase
       await Firebase.initializeApp(
         options: DefaultFirebaseOptions.currentPlatform,
       );
-      print('✅ Firebase initialized');
+      print('Firebase initialized');
       
       // Initialize Bluetooth (allow to fail gracefully)
       try {
         final bluetoothResult = await BluetoothService().initialize();
         if (bluetoothResult['success']) {
-          print('✅ Bluetooth initialized');
+          print('Bluetooth initialized');
         } else {
-          print('⚠️ Bluetooth initialization incomplete: ${bluetoothResult['error']}');
+          print('Bluetooth initialization incomplete: ${bluetoothResult['error']}');
         }
       } catch (e) {
-        print('⚠️ Bluetooth initialization failed: $e');
+        print('Bluetooth initialization failed: $e');
         // Continue anyway - user can enable later
       }
       
@@ -109,11 +109,11 @@ class _SafeRideAppState extends State<SafeRideApp> with WidgetsBindingObserver {
         
         // Set up token refresh callback
         fcmService.onTokenRefresh = (newToken) async {
-          print('🔄 FCM token refreshed, updating backend...');
+          print('FCM token refreshed, updating backend...');
           try {
             await ApiService().updateFcmToken(newToken);
           } catch (e) {
-            print('⚠️ Failed to update FCM token on backend: $e');
+            print('Failed to update FCM token on backend: $e');
           }
         };
         
@@ -128,24 +128,24 @@ class _SafeRideAppState extends State<SafeRideApp> with WidgetsBindingObserver {
         };
         
         await fcmService.initialize();
-        print('✅ FCM initialized');
+        print('FCM initialized');
       } catch (e) {
-        print('⚠️ FCM initialization failed: $e');
+        print('FCM initialization failed: $e');
         // Continue anyway
       }
       
       // Connect to Socket.IO (non-blocking - allow to fail gracefully)
       SocketService().connect().then((_) {
-        print('✅ Socket.IO connected');
+        print('Socket.IO connected');
       }).catchError((e) {
-        print('⚠️ Socket.IO connection failed: $e');
+        print('Socket.IO connection failed: $e');
         // Continue anyway - user can connect later after registration
       });
       
-      print('✅ App initialized successfully');
+      print('App initialized successfully');
       
     } catch (e) {
-      print('❌ Initialization error: $e');
+      print('Initialization error: $e');
       setState(() {
         _error = true;
         _errorMessage = e.toString();
@@ -318,14 +318,14 @@ class _SafeRideAppState extends State<SafeRideApp> with WidgetsBindingObserver {
 
   Future<void> _openMaps(String lat, String lng) async {
     try {
-      print('🗺️ Opening maps with coordinates: $lat, $lng');
+      print('Opening maps with coordinates: $lat, $lng');
       
       // Try Google Maps app first with intent URL (works best on Android)
       final googleMapsUrl = 'google.navigation:q=$lat,$lng';
       final googleMapsUri = Uri.parse(googleMapsUrl);
       
       if (await canLaunchUrl(googleMapsUri)) {
-        print('✅ Launching Google Maps app...');
+        print('Launching Google Maps app...');
         await launchUrl(googleMapsUri, mode: LaunchMode.externalApplication);
         return;
       }
@@ -335,7 +335,7 @@ class _SafeRideAppState extends State<SafeRideApp> with WidgetsBindingObserver {
       final geoUri = Uri.parse(geoUrl);
       
       if (await canLaunchUrl(geoUri)) {
-        print('✅ Launching with geo: URL...');
+        print('Launching with geo: URL...');
         await launchUrl(geoUri, mode: LaunchMode.externalApplication);
         return;
       }
@@ -344,11 +344,11 @@ class _SafeRideAppState extends State<SafeRideApp> with WidgetsBindingObserver {
       final webUrl = 'https://www.google.com/maps/search/?api=1&query=$lat,$lng';
       final webUri = Uri.parse(webUrl);
       
-      print('✅ Launching web maps...');
+      print('Launching web maps...');
       await launchUrl(webUri, mode: LaunchMode.externalApplication);
       
     } catch (e) {
-      print('❌ Error opening maps: $e');
+      print('Error opening maps: $e');
       // Show error message to user
       final context = navigatorKey.currentContext;
       if (context != null) {

@@ -61,7 +61,7 @@ class SMSService {
       print('Firebase Result: ${result.data}');
 
       if (result.data != null && result.data['success'] == true) {
-        print("✓ SMS sent: ${result.data['messageId']}");
+        print("SMS sent: ${result.data['messageId']}");
         return true;
       } else {
         throw Exception(result.data?['error'] ?? 'Unknown error');

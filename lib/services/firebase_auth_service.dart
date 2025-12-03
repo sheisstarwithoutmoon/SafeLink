@@ -19,7 +19,7 @@ class FirebaseAuthService {
   /// Send OTP to phone number
   Future<Map<String, dynamic>> sendOTP(String phoneNumber) async {
     try {
-      print('📱 Sending OTP to: $phoneNumber');
+      print('Sending OTP to: $phoneNumber');
       
       // Validate phone number format
       if (!phoneNumber.startsWith('+')) {
@@ -46,7 +46,7 @@ class FirebaseAuthService {
         
         // Auto-verification completed (Android only)
         verificationCompleted: (PhoneAuthCredential credential) async {
-          print('✅ Auto-verification completed');
+          print('Auto-verification completed');
           try {
             await _auth.signInWithCredential(credential);
             if (!completer.isCompleted) {
@@ -56,7 +56,7 @@ class FirebaseAuthService {
               });
             }
           } catch (e) {
-            print('❌ Auto sign-in failed: $e');
+            print('Auto sign-in failed: $e');
             if (!completer.isCompleted) {
               completer.complete({
                 'success': false,
@@ -68,7 +68,7 @@ class FirebaseAuthService {
         
         // Verification failed
         verificationFailed: (FirebaseAuthException e) {
-          print('❌ Verification failed: ${e.code} - ${e.message}');
+          print('Verification failed: ${e.code} - ${e.message}');
           
           String errorMessage = e.message ?? 'Verification failed';
           
@@ -93,8 +93,8 @@ class FirebaseAuthService {
         
         // OTP sent successfully
         codeSent: (String verificationId, int? resendToken) {
-          print('✅ OTP sent successfully');
-          print('📝 Verification ID: ${verificationId.substring(0, 20)}...');
+          print('OTP sent successfully');
+          print('Verification ID: ${verificationId.substring(0, 20)}...');
           _verificationId = verificationId;
           _resendToken = resendToken;
           
@@ -108,7 +108,7 @@ class FirebaseAuthService {
         
         // Auto-retrieval timeout
         codeAutoRetrievalTimeout: (String verificationId) {
-          print('⏱️ Auto-retrieval timeout');
+          print('Auto-retrieval timeout');
           _verificationId = verificationId;
         },
         
@@ -126,7 +126,7 @@ class FirebaseAuthService {
         },
       );
     } catch (e) {
-      print('❌ Error sending OTP: $e');
+      print('Error sending OTP: $e');
       return {
         'success': false,
         'message': 'Error: ${e.toString()}',
@@ -144,7 +144,7 @@ class FirebaseAuthService {
         };
       }
 
-      print('🔐 Verifying OTP: $smsCode');
+      print('Verifying OTP: $smsCode');
       
       final credential = PhoneAuthProvider.credential(
         verificationId: _verificationId!,
@@ -157,7 +157,7 @@ class FirebaseAuthService {
       final idToken = await userCredential.user?.getIdToken();
       
       if (idToken != null) {
-        print('✅ OTP verified successfully');
+        print('OTP verified successfully');
         return {
           'success': true,
           'firebaseToken': idToken,
@@ -171,7 +171,7 @@ class FirebaseAuthService {
         };
       }
     } on FirebaseAuthException catch (e) {
-      print('❌ Firebase Auth Error: ${e.code} - ${e.message}');
+      print('Firebase Auth Error: ${e.code} - ${e.message}');
       
       String message;
       switch (e.code) {
@@ -190,7 +190,7 @@ class FirebaseAuthService {
         'message': message,
       };
     } catch (e) {
-      print('❌ Error verifying OTP: $e');
+      print('Error verifying OTP: $e');
       return {
         'success': false,
         'message': e.toString(),
@@ -206,7 +206,7 @@ class FirebaseAuthService {
       
       return await user.getIdToken(forceRefresh);
     } catch (e) {
-      print('❌ Error getting ID token: $e');
+      print('Error getting ID token: $e');
       return null;
     }
   }
@@ -217,9 +217,9 @@ class FirebaseAuthService {
       await _auth.signOut();
       _verificationId = null;
       _resendToken = null;
-      print('✅ Signed out successfully');
+      print('Signed out successfully');
     } catch (e) {
-      print('❌ Error signing out: $e');
+      print('Error signing out: $e');
     }
   }
 

@@ -29,7 +29,7 @@ class BluetoothService {
   /// Request all necessary Bluetooth permissions
   Future<bool> requestPermissions() async {
     try {
-      print('🔐 Requesting Bluetooth permissions...');
+      print('Requesting Bluetooth permissions...');
       
       // Request Bluetooth permissions
       Map<Permission, PermissionStatus> statuses = await [
@@ -43,9 +43,9 @@ class BluetoothService {
       bool allGranted = statuses.values.every((status) => status.isGranted);
       
       if (allGranted) {
-        print('✅ All Bluetooth permissions granted');
+        print('All Bluetooth permissions granted');
       } else {
-        print('❌ Some Bluetooth permissions denied:');
+        print('Some Bluetooth permissions denied:');
         statuses.forEach((permission, status) {
           print('   ${permission.toString()}: ${status.toString()}');
         });
@@ -53,7 +53,7 @@ class BluetoothService {
 
       return allGranted;
     } catch (e) {
-      print('❌ Error requesting Bluetooth permissions: $e');
+      print('Error requesting Bluetooth permissions: $e');
       return false;
     }
   }
@@ -64,7 +64,7 @@ class BluetoothService {
       bool? isEnabled = await _bluetooth.isEnabled;
       return isEnabled ?? false;
     } catch (e) {
-      print('❌ Error checking Bluetooth state: $e');
+      print('Error checking Bluetooth state: $e');
       return false;
     }
   }
@@ -72,17 +72,17 @@ class BluetoothService {
   /// Request to enable Bluetooth
   Future<bool> enableBluetooth() async {
     try {
-      print('📡 Requesting to enable Bluetooth...');
+      print('Requesting to enable Bluetooth...');
       bool? result = await _bluetooth.requestEnable();
       if (result == true) {
-        print('✅ Bluetooth enabled');
+        print('Bluetooth enabled');
         return true;
       } else {
-        print('❌ User denied Bluetooth enable request');
+        print('User denied Bluetooth enable request');
         return false;
       }
     } catch (e) {
-      print('❌ Error enabling Bluetooth: $e');
+      print('Error enabling Bluetooth: $e');
       return false;
     }
   }
@@ -90,19 +90,19 @@ class BluetoothService {
   /// Get list of bonded (paired) devices
   Future<List<BluetoothDevice>> getBondedDevices() async {
     try {
-      print('📱 Getting bonded devices...');
+      print('Getting bonded devices...');
       List<BluetoothDevice> devices = await _bluetooth.getBondedDevices();
-      print('✅ Found ${devices.length} bonded devices');
+      print('Found ${devices.length} bonded devices');
       return devices;
     } catch (e) {
-      print('❌ Error getting bonded devices: $e');
+      print('Error getting bonded devices: $e');
       return [];
     }
   }
 
   /// Scan for available Bluetooth devices
   Stream<BluetoothDiscoveryResult> startDiscovery() {
-    print('🔍 Starting Bluetooth discovery...');
+    print('Starting Bluetooth discovery...');
     return _bluetooth.startDiscovery();
   }
 
@@ -195,17 +195,17 @@ class BluetoothService {
   /// Send data to connected device
   Future<bool> sendData(String data) async {
     if (!_isConnected || _connection == null) {
-      print('⚠️ Not connected to any device');
+      print('Not connected to any device');
       return false;
     }
 
     try {
       _connection!.output.add(Uint8List.fromList(data.codeUnits));
       await _connection!.output.allSent;
-      print('📤 Sent: $data');
+      print('Sent: $data');
       return true;
     } catch (e) {
-      print('❌ Error sending data: $e');
+      print('Error sending data: $e');
       return false;
     }
   }
@@ -215,9 +215,9 @@ class BluetoothService {
     if (_connection != null) {
       try {
         await _connection!.close();
-        print('🔌 Disconnected from ${_connectedDevice?.name ?? 'device'}');
+        print('Disconnected from ${_connectedDevice?.name ?? 'device'}');
       } catch (e) {
-        print('❌ Error during disconnect: $e');
+        print('Error during disconnect: $e');
       }
     }
     _handleDisconnection();
@@ -234,7 +234,7 @@ class BluetoothService {
   /// Initialize Bluetooth service (check permissions and state)
   Future<Map<String, dynamic>> initialize() async {
     try {
-      print('🚀 Initializing Bluetooth service...');
+      print('Initializing Bluetooth service...');
       
       // Check and request permissions
       bool hasPermissions = await requestPermissions();
@@ -260,14 +260,14 @@ class BluetoothService {
         }
       }
 
-      print('✅ Bluetooth service initialized successfully');
+      print('Bluetooth service initialized successfully');
       return {
         'success': true,
         'hasPermissions': true,
         'isEnabled': true,
       };
     } catch (e) {
-      print('❌ Error initializing Bluetooth service: $e');
+      print('Error initializing Bluetooth service: $e');
       return {
         'success': false,
         'error': e.toString(),

@@ -266,7 +266,7 @@ class _HomeScreenState extends State<HomeScreen> {
           }
         }
         
-        print('🚨 ARDUINO TIMER COMPLETED! Showing app countdown dialog...');
+        print('ARDUINO TIMER COMPLETED! Showing app countdown dialog...');
         _lastAccidentDetection = now;
         _bluetoothDataBuffer = ''; // Clear buffer after detection
         _handleAccidentDetection();

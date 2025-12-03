@@ -22,13 +22,13 @@ class SocketService {
 
   Future<void> connect() async {
     if (_socket != null && _socket!.connected) {
-      print('✅ Socket already connected');
+      print('Socket already connected');
       return;
     }
 
     // If socket exists but disconnected, try to reconnect
     if (_socket != null && !_socket!.connected) {
-      print('🔄 Reconnecting existing socket...');
+      print('Reconnecting existing socket...');
       _socket!.connect();
       return;
     }
@@ -36,11 +36,11 @@ class SocketService {
     try {
       final userId = await _storage.getUserId();
       if (userId == null) {
-        print('⚠️ Socket.IO: User not logged in, skipping connection');
+        print('Socket.IO: User not logged in, skipping connection');
         return; // Don't throw error, just skip connection
       }
 
-      print('🔌 Creating new socket connection...');
+      print('Creating new socket connection...');
 
       _socket = IO.io(
         ApiConfig.socketUrl,
@@ -60,36 +60,36 @@ class SocketService {
 
       // Authenticate after connection
       _socket!.on('connect', (_) {
-        print('✅ Socket connected');
+        print('Socket connected');
         authenticate(userId);
         onConnected?.call();
       });
 
       _socket!.on('disconnect', (reason) {
-        print('⚠️ Socket disconnected: $reason');
+        print('Socket disconnected: $reason');
         onDisconnected?.call();
       });
 
       _socket!.on('reconnect', (attemptNumber) {
-        print('🔄 Socket reconnected after $attemptNumber attempts');
+        print('Socket reconnected after $attemptNumber attempts');
         authenticate(userId);
       });
 
       _socket!.on('reconnect_attempt', (attemptNumber) {
-        print('🔄 Socket reconnection attempt: $attemptNumber');
+        print('Socket reconnection attempt: $attemptNumber');
       });
 
       _socket!.on('reconnect_failed', (_) {
-        print('❌ Socket reconnection failed');
+        print('Socket reconnection failed');
       });
 
       _socket!.on('error', (error) {
-        print('❌ Socket error: $error');
+        print('Socket error: $error');
         onError?.call(error);
       });
 
     } catch (e) {
-      print('❌ Error connecting to socket: $e');
+      print('Error connecting to socket: $e');
       rethrow;
     }
   }
