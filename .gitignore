@@ -155,7 +155,12 @@ backend/Thumbs.db
 # Firebase
 # ========================================
 
-# Firebase config (keep firebase_options.dart)
+# Firebase config with API keys (SENSITIVE!)
+lib/firebase_options.dart
+android/app/google-services.json
+ios/Runner/GoogleService-Info.plist
+
+# Firebase project files
 .firebase/
 firebase-debug.log
 firestore-debug.log
