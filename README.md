@@ -8,7 +8,7 @@ This repository contains the **frontend mobile app**, which communicates with Io
 ## 🎥 Demo Video
 
 Watch the working demo of the application here:  
-👉 **[Demo Video]([https://drive.google.com/file/d/1W5foQydEXs2tQ-Oh507MB0DTkoLOJtFr/view?usp=sharing](https://drive.google.com/file/d/1W5foQydEXs2tQ-Oh507MB0DTkoLOJtFr/view?usp=sharing))**
+👉 **[Demo Video](https://drive.google.com/file/d/1W5foQydEXs2tQ-Oh507MB0DTkoLOJtFr/view?usp=sharing)**
 
 ---
 
@@ -63,4 +63,4 @@ The Flutter application serves as the user-facing layer of the system. It receiv
 
 ### Clone the Repository
 ```bash
-git clone https://github.com/your-username/sheisstarwithoutmoon/SafeLink
+git clone https://github.com/sheisstarwithoutmoon/SafeLink
